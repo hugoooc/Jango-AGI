@@ -13,9 +13,12 @@ from app_mapper.config import (
     DEFAULT_AX_MAX_DEPTH,
     DEFAULT_AX_MAX_ELEMENTS,
     DEFAULT_INTERPRETATION_ARTIFACT_ROOT,
+    DEFAULT_NODE_OBSERVATION_ROOT,
+    DEFAULT_NODE_REGISTRY_ROOT,
     DEFAULT_TRANSITION_ARTIFACT_ROOT,
     OPENVSP,
 )
+from app_mapper.identity import identify_observation
 from app_mapper.holo import (
     HoloConfigurationError,
     HoloSettings,
@@ -225,6 +228,7 @@ def run_holo_interpretation(
     min_confidence: float,
     max_depth: int,
     max_elements: int,
+    registry_root: Path,
 ) -> int:
     destination = create_observation_directory(artifact_root)
     diagnostics = collect_diagnostics()
@@ -289,6 +293,7 @@ def run_holo_interpretation(
         write_json(destination / "raw-content.json", {"content": content})
         validated = validate_and_filter(content, min_confidence=min_confidence)
         write_json(destination / "interpretation.json", validated.model_dump(mode="json"))
+        identity = identify_observation(destination, registry_root)
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         write_json(
@@ -307,8 +312,75 @@ def run_holo_interpretation(
     print(f"State: {validated.state.title} ({validated.state.type})")
     print(f"Accepted navigation targets: {len(validated.navigation_targets)}")
     print(f"Rejected by local policy: {len(validated.rejected_targets)}")
+    print(f"Node identity: {identity.status} ({identity.node_id or 'review required'})")
     print("Actions executed: 0 (read-only)")
-    return 0
+    return 4 if identity.review_required else 0
+
+
+def _identity_preflight(diagnostics: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if not diagnostics["target"]["installed"]:
+        errors.append("OpenVSP is not installed.")
+    if not diagnostics["running"]:
+        errors.append("OpenVSP is not running.")
+    if not diagnostics["permissions"]["screen_recording"]["granted"]:
+        errors.append("Screen Recording permission is required.")
+    if not diagnostics["permissions"]["accessibility"]["granted"]:
+        errors.append("Accessibility permission is required.")
+    return errors
+
+
+def run_capture_node(
+    artifact_root: Path,
+    registry_root: Path,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    destination = create_observation_directory(artifact_root)
+    diagnostics = collect_diagnostics()
+    write_json(
+        destination / "manifest.json",
+        {**diagnostics, "identity_capture": True, "actions_executed": 0},
+    )
+    errors = _identity_preflight(diagnostics)
+    if errors:
+        write_json(destination / "failure.json", {"errors": errors, "actions_executed": 0})
+        print(f"Node capture stopped. Artifacts: {destination}")
+        for error in errors:
+            print(f"- {error}")
+        return 2
+    pid = int(diagnostics["processes"][0]["pid"])
+    try:
+        capture_interpretation_observation(
+            pid, destination, max_depth, max_elements
+        )
+        decision = identify_observation(destination, registry_root)
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        write_json(destination / "failure.json", {"errors": [error], "actions_executed": 0})
+        print(f"Node capture failed. Artifacts: {destination}")
+        print(f"- {error}")
+        return 3
+    print(f"Node observation: {destination}")
+    print(f"Identity decision: {decision.status}")
+    print(f"Node ID: {decision.node_id or 'unresolved — inspect identity.json'}")
+    if decision.candidates:
+        print(f"Best candidate score: {decision.candidates[0].score:.3f}")
+    print("Actions executed: 0 (read-only)")
+    return 4 if decision.review_required else 0
+
+
+def run_identify(observation_dir: Path, registry_root: Path) -> int:
+    try:
+        decision = identify_observation(observation_dir, registry_root)
+    except Exception as exc:
+        print(f"Identity failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Identity decision: {decision.status}")
+    print(f"Node ID: {decision.node_id or 'unresolved — inspect identity.json'}")
+    if decision.candidates:
+        print(f"Best candidate score: {decision.candidates[0].score:.3f}")
+    return 4 if decision.review_required else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -361,6 +433,30 @@ def build_parser() -> argparse.ArgumentParser:
     interpret_parser.add_argument("--min-confidence", type=float, default=0.5)
     interpret_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
     interpret_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+    interpret_parser.add_argument(
+        "--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT
+    )
+
+    capture_node_parser = subparsers.add_parser(
+        "capture-node",
+        help="Capture a read-only state and assign or match its stable node identity.",
+    )
+    capture_node_parser.add_argument(
+        "--artifact-root", type=Path, default=DEFAULT_NODE_OBSERVATION_ROOT
+    )
+    capture_node_parser.add_argument(
+        "--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT
+    )
+    capture_node_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    capture_node_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+
+    identify_parser = subparsers.add_parser(
+        "identify", help="Assign node identity to an existing observation directory."
+    )
+    identify_parser.add_argument("observation_dir", type=Path)
+    identify_parser.add_argument(
+        "--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT
+    )
     return parser
 
 
@@ -400,6 +496,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.min_confidence,
             args.max_depth,
             args.max_elements,
+            args.registry_root,
         )
+    if args.command == "capture-node":
+        if args.max_depth < 0 or args.max_elements < 1:
+            parser.error("--max-depth must be non-negative and --max-elements must be positive")
+        return run_capture_node(
+            args.artifact_root,
+            args.registry_root,
+            args.max_depth,
+            args.max_elements,
+        )
+    if args.command == "identify":
+        return run_identify(args.observation_dir, args.registry_root)
     parser.error(f"Unknown command: {args.command}")
     return 2

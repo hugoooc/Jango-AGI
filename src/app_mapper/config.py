@@ -18,5 +18,7 @@ OPENVSP = TargetApplication(
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/observations")
 DEFAULT_TRANSITION_ARTIFACT_ROOT = Path("artifacts/transitions")
 DEFAULT_INTERPRETATION_ARTIFACT_ROOT = Path("artifacts/interpretations")
+DEFAULT_NODE_OBSERVATION_ROOT = Path("artifacts/node-observations")
+DEFAULT_NODE_REGISTRY_ROOT = Path("artifacts/nodes")
 DEFAULT_AX_MAX_DEPTH = 12
 DEFAULT_AX_MAX_ELEMENTS = 5_000

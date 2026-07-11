@@ -273,7 +273,7 @@ Use an H Company Holo model to describe the current state and identify potential
 
 ### Status
 
-`Implemented — awaiting live Holo API validation`
+`Implemented — manually validated`
 
 ## Milestone 4 — Node Identity and Deduplication
 
@@ -324,7 +324,7 @@ Define when two observations represent the same navigational state.
 
 ### Status
 
-`Not started`
+`Implemented — core validation passed, awaiting full manual matrix`
 
 ## Milestone 5 — First Replayable Graph Edge
 
@@ -680,8 +680,8 @@ These should be answered through experiments instead of assumed upfront:
 |---|---|---|
 | 1 | Read-only observation | Implemented — awaiting manual validation |
 | 2 | One safe, reversible interaction | Implemented — manually validated |
-| 3 | Read-only Holo interpretation | Implemented — awaiting live API validation |
-| 4 | Node identity and deduplication | Not started |
+| 3 | Read-only Holo interpretation | Implemented — manually validated |
+| 4 | Node identity and deduplication | Implemented — awaiting full manual matrix |
 | 5 | First replayable graph edge | Not started |
 | 6 | Whitelisted one-hop discovery | Not started |
 | 7 | Bounded autonomous exploration | Not started |
@@ -689,4 +689,4 @@ These should be answered through experiments instead of assumed upfront:
 
 ## Immediate Next Step
 
-Set `HAI_API_KEY`, run `uv run python -m app_mapper interpret` against several known OpenVSP states, and review `interpretation.json` against each screenshot. Record false positives and missed controls before beginning Milestone 4.
+Run the Milestone 4 manual acceptance matrix in the README, paying special attention to stable IDs across move/hover captures, a distinct ID for About, and safe refusal of ambiguous matches. Do not begin Milestone 5 until those results are reviewed.

@@ -2,7 +2,7 @@
 
 An incremental Python prototype for observing and mapping the OpenVSP user interface on macOS.
 
-The project implements Milestones 1–3 from [PLAN.md](PLAN.md): observation, one allowlisted reversible interaction, and read-only Holo interpretation. It does not modify or save an OpenVSP model.
+The project implements Milestones 1–4 from [PLAN.md](PLAN.md): observation, one allowlisted reversible interaction, read-only Holo interpretation, and stable state identity/deduplication. It does not modify or save an OpenVSP model.
 
 ## Development commands
 
@@ -12,6 +12,7 @@ uv run python -m app_mapper doctor
 uv run python -m app_mapper observe
 uv run python -m app_mapper exercise-about
 uv run python -m app_mapper interpret
+uv run python -m app_mapper capture-node
 uv run pytest
 ```
 
@@ -46,3 +47,33 @@ Important files in each run:
 - `interpretation.json`: locally validated safe targets plus targets rejected by risk, keyword, or confidence policy.
 
 Optional configuration is documented in `.env.example`. `HOLO_MODEL` defaults to `holo3-1-35b-a3b`, and accepted target confidence defaults to `0.5`.
+
+## Milestone 4 node identity
+
+`capture-node` takes a read-only OpenVSP-only screenshot and accessibility snapshot, then either creates a node or matches an existing one. It does not call Holo and performs no UI action. `interpret` now also assigns a node automatically after a successful Holo response.
+
+Node data is stored under `artifacts/nodes/`. Every individual capture remains under `artifacts/node-observations/` with:
+
+- `identity.json`: `new`, `matched`, or `ambiguous`, plus candidate scores and reasons.
+- `fingerprints.json`: normalized accessibility, perceptual image, and semantic fingerprints.
+- `normalized-accessibility.json`: the stable structure after geometry, focus, dates, versions, and document-name volatility are removed.
+
+### Manual acceptance test
+
+Use a separate registry so the expected counts are easy to inspect:
+
+```bash
+REGISTRY=artifacts/nodes-manual-test
+OBSERVATIONS=artifacts/node-observations-manual-test
+
+uv run python -m app_mapper capture-node --registry-root "$REGISTRY" --artifact-root "$OBSERVATIONS"
+uv run python -m app_mapper capture-node --registry-root "$REGISTRY" --artifact-root "$OBSERVATIONS"
+```
+
+The first result should be `new`. The second should be `matched` with exactly the same node ID.
+
+Next, move the OpenVSP windows and capture again. Hover over a control and capture once more. Both should remain `matched` to the original node; small screenshot changes are expected, but the stable node ID must not change.
+
+Then manually open **OpenVSP → About vsp**, leave it open, and run the same `capture-node` command. It should be `new` with a different node ID. Close About and capture again; it should be `matched` to the original workspace node.
+
+Finally inspect `$REGISTRY/index.json`. It should normally contain exactly two nodes: one workspace node with multiple observations and one dialog node. For each capture, inspect `identity.json`: `review_required` should be `false`. If a result is `ambiguous`, it must have `node_id: null`, `review_required: true`, and candidate reasons; this is a safe refusal to merge, not a test failure in the safety mechanism.
