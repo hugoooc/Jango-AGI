@@ -273,7 +273,7 @@ Use an H Company Holo model to describe the current state and identify potential
 
 ### Status
 
-`Not started`
+`Implemented — awaiting live Holo API validation`
 
 ## Milestone 4 — Node Identity and Deduplication
 
@@ -679,8 +679,8 @@ These should be answered through experiments instead of assumed upfront:
 | Milestone | Description | Status |
 |---|---|---|
 | 1 | Read-only observation | Implemented — awaiting manual validation |
-| 2 | One safe, reversible interaction | Not started |
-| 3 | Read-only Holo interpretation | Not started |
+| 2 | One safe, reversible interaction | Implemented — manually validated |
+| 3 | Read-only Holo interpretation | Implemented — awaiting live API validation |
 | 4 | Node identity and deduplication | Not started |
 | 5 | First replayable graph edge | Not started |
 | 6 | Whitelisted one-hop discovery | Not started |
@@ -689,4 +689,4 @@ These should be answered through experiments instead of assumed upfront:
 
 ## Immediate Next Step
 
-Manually validate Milestone 1 using the procedure in its section. Review the screenshot, window selection, and accessibility output together. Fix any problems until the acceptance gate passes; do not begin Milestone 2 before that confirmation.
+Set `HAI_API_KEY`, run `uv run python -m app_mapper interpret` against several known OpenVSP states, and review `interpretation.json` against each screenshot. Record false positives and missed controls before beginning Milestone 4.

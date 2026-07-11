@@ -12,9 +12,17 @@ from app_mapper.config import (
     DEFAULT_ARTIFACT_ROOT,
     DEFAULT_AX_MAX_DEPTH,
     DEFAULT_AX_MAX_ELEMENTS,
+    DEFAULT_INTERPRETATION_ARTIFACT_ROOT,
     DEFAULT_TRANSITION_ARTIFACT_ROOT,
     OPENVSP,
 )
+from app_mapper.holo import (
+    HoloConfigurationError,
+    HoloSettings,
+    build_request,
+    request_interpretation,
+)
+from app_mapper.interpretation import capture_interpretation_observation, validate_and_filter
 from app_mapper.macos.accessibility import read_application_tree
 from app_mapper.macos.applications import (
     choose_primary_window,
@@ -209,6 +217,100 @@ def run_about_transition(
     return 0
 
 
+def run_holo_interpretation(
+    artifact_root: Path,
+    model: str | None,
+    base_url: str | None,
+    timeout: float,
+    min_confidence: float,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    destination = create_observation_directory(artifact_root)
+    diagnostics = collect_diagnostics()
+    try:
+        settings = HoloSettings.from_environment(
+            model=model,
+            base_url=base_url,
+            timeout=timeout,
+        )
+    except HoloConfigurationError as exc:
+        write_json(
+            destination / "failure.json",
+            {"errors": [str(exc)], "external_request_sent": False, "actions_executed": 0},
+        )
+        print(f"Interpretation stopped before capture. Artifacts: {destination}")
+        print(f"- {exc}")
+        return 2
+
+    manifest = {
+        **diagnostics,
+        "provider": settings.public_dict(),
+        "read_only": True,
+        "actions_executed": 0,
+    }
+    write_json(destination / "manifest.json", manifest)
+
+    errors: list[str] = []
+    if not diagnostics["target"]["installed"]:
+        errors.append("OpenVSP is not installed.")
+    if not diagnostics["running"]:
+        errors.append("OpenVSP is not running.")
+    if not diagnostics["permissions"]["screen_recording"]["granted"]:
+        errors.append("Screen Recording permission is required.")
+    if not diagnostics["permissions"]["accessibility"]["granted"]:
+        errors.append("Accessibility permission is required.")
+    if errors:
+        write_json(
+            destination / "failure.json",
+            {"errors": errors, "external_request_sent": False, "actions_executed": 0},
+        )
+        print(f"Interpretation stopped before capture. Artifacts: {destination}")
+        for error in errors:
+            print(f"- {error}")
+        return 2
+
+    pid = int(diagnostics["processes"][0]["pid"])
+    request_sent = False
+    try:
+        screenshot, context = capture_interpretation_observation(
+            pid,
+            destination,
+            max_depth,
+            max_elements,
+        )
+        _, _, request_record = build_request(screenshot, context, settings)
+        write_json(destination / "request.json", request_record)
+        request_sent = True
+        raw, content, _ = request_interpretation(
+            settings, screenshot, context
+        )
+        write_json(destination / "raw-response.json", raw)
+        write_json(destination / "raw-content.json", {"content": content})
+        validated = validate_and_filter(content, min_confidence=min_confidence)
+        write_json(destination / "interpretation.json", validated.model_dump(mode="json"))
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        write_json(
+            destination / "failure.json",
+            {
+                "errors": [error],
+                "external_request_sent": request_sent,
+                "actions_executed": 0,
+            },
+        )
+        print(f"Interpretation failed. Artifacts: {destination}")
+        print(f"- {error}")
+        return 3
+
+    print(f"Holo interpretation artifacts: {destination}")
+    print(f"State: {validated.state.title} ({validated.state.type})")
+    print(f"Accepted navigation targets: {len(validated.navigation_targets)}")
+    print(f"Rejected by local policy: {len(validated.rejected_targets)}")
+    print("Actions executed: 0 (read-only)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="app_mapper",
@@ -242,6 +344,23 @@ def build_parser() -> argparse.ArgumentParser:
     transition_parser.add_argument("--timeout", type=float, default=8.0)
     transition_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
     transition_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+
+    interpret_parser = subparsers.add_parser(
+        "interpret",
+        help="Capture OpenVSP and ask Holo for a read-only structured interpretation.",
+    )
+    interpret_parser.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=DEFAULT_INTERPRETATION_ARTIFACT_ROOT,
+        help=f"Interpretation output root (default: {DEFAULT_INTERPRETATION_ARTIFACT_ROOT}).",
+    )
+    interpret_parser.add_argument("--model", help="Holo model ID (default: HOLO_MODEL or free-tier model).")
+    interpret_parser.add_argument("--base-url", help="Models API base URL (default: HOLO_BASE_URL).")
+    interpret_parser.add_argument("--timeout", type=float, default=60.0)
+    interpret_parser.add_argument("--min-confidence", type=float, default=0.5)
+    interpret_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    interpret_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
     return parser
 
 
@@ -263,6 +382,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_about_transition(
             args.artifact_root,
             args.timeout,
+            args.max_depth,
+            args.max_elements,
+        )
+    if args.command == "interpret":
+        if args.timeout <= 0:
+            parser.error("--timeout must be positive")
+        if not 0 <= args.min_confidence <= 1:
+            parser.error("--min-confidence must be in [0, 1]")
+        if args.max_depth < 0 or args.max_elements < 1:
+            parser.error("--max-depth must be non-negative and --max-elements must be positive")
+        return run_holo_interpretation(
+            args.artifact_root,
+            args.model,
+            args.base_url,
+            args.timeout,
+            args.min_confidence,
             args.max_depth,
             args.max_elements,
         )

@@ -115,6 +115,30 @@ def read_application_tree(pid: int, max_depth: int, max_elements: int) -> dict[s
     }
 
 
+def read_menu_tree(pid: int, max_depth: int, max_elements: int) -> dict[str, Any]:
+    application = ApplicationServices.AXUIElementCreateApplication(pid)
+    menu_bar = attribute_value(application, ApplicationServices.kAXMenuBarAttribute)
+    if menu_bar is None:
+        return {
+            "pid": pid,
+            "max_depth": max_depth,
+            "max_elements": max_elements,
+            "element_count": 0,
+            "truncated": False,
+            "root": None,
+        }
+    state = TraversalState(max_depth=max_depth, max_elements=max_elements)
+    root = _read_node(menu_bar, depth=0, state=state)
+    return {
+        "pid": pid,
+        "max_depth": max_depth,
+        "max_elements": max_elements,
+        "element_count": state.element_count,
+        "truncated": state.truncated,
+        "root": root,
+    }
+
+
 class AccessibilityActionError(RuntimeError):
     """Raised when a deliberately selected Accessibility action cannot be performed."""
 
