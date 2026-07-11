@@ -109,3 +109,59 @@ class IdentityDecision(StrictModel):
     observation_path: str
     candidates: list[MatchCandidate]
     review_required: bool
+
+
+class EdgeAction(StrictModel):
+    action_key: Literal["open_about", "dismiss_about"]
+    semantic_description: str
+    mechanism: Literal["macos_accessibility"] = "macos_accessibility"
+    accessibility_locator: dict[str, Any]
+    keyboard_locator: str | None = None
+    visual_locator: dict[str, Any] | None = None
+    preconditions: list[str]
+    expected_postconditions: list[str]
+    risk: Literal["safe_navigation"] = "safe_navigation"
+    reversible: Literal[True] = True
+    reverse_action_key: Literal["open_about", "dismiss_about"]
+
+
+class EdgeEvidence(StrictModel):
+    recorded_at: str
+    run_path: str
+    source_observation: str
+    destination_observation: str
+    returned_observation: str
+
+
+class ReplayStatistics(StrictModel):
+    attempts: int = Field(default=0, ge=0)
+    successes: int = Field(default=0, ge=0)
+    failures: int = Field(default=0, ge=0)
+    refused_wrong_source: int = Field(default=0, ge=0)
+    last_attempt_at: str | None = None
+    last_success_at: str | None = None
+
+
+class GraphEdge(StrictModel):
+    schema_version: Literal[1] = 1
+    edge_id: str
+    source_node_id: str
+    destination_node_id: str
+    action: EdgeAction
+    evidence: list[EdgeEvidence]
+    replay: ReplayStatistics = Field(default_factory=ReplayStatistics)
+
+
+class GraphNodeSummary(StrictModel):
+    node_id: str
+    semantic_name: str
+    state_type: Literal["workspace", "dialog", "manager", "menu", "unknown"]
+    representative_screenshot: str
+
+
+class GraphRecord(StrictModel):
+    schema_version: Literal[1] = 1
+    directed: Literal[True] = True
+    updated_at: str
+    nodes: list[GraphNodeSummary]
+    edges: list[GraphEdge]

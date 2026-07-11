@@ -12,11 +12,20 @@ from app_mapper.config import (
     DEFAULT_ARTIFACT_ROOT,
     DEFAULT_AX_MAX_DEPTH,
     DEFAULT_AX_MAX_ELEMENTS,
+    DEFAULT_GRAPH_ROOT,
+    DEFAULT_GRAPH_RUN_ROOT,
     DEFAULT_INTERPRETATION_ARTIFACT_ROOT,
     DEFAULT_NODE_OBSERVATION_ROOT,
     DEFAULT_NODE_REGISTRY_ROOT,
+    DEFAULT_REPLAY_ROOT,
     DEFAULT_TRANSITION_ARTIFACT_ROOT,
     OPENVSP,
+)
+from app_mapper.graph import (
+    ReplayRefused,
+    graph_summary,
+    record_about_edges,
+    replay_edge,
 )
 from app_mapper.identity import identify_observation
 from app_mapper.holo import (
@@ -383,6 +392,103 @@ def run_identify(observation_dir: Path, registry_root: Path) -> int:
     return 4 if decision.review_required else 0
 
 
+def run_graph_record_about(
+    graph_root: Path,
+    registry_root: Path,
+    run_root: Path,
+    timeout: float,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    diagnostics = collect_diagnostics()
+    errors = _identity_preflight(diagnostics)
+    if errors:
+        print("Graph recording stopped before interaction.")
+        for error in errors:
+            print(f"- {error}")
+        return 2
+    pid = int(diagnostics["processes"][0]["pid"])
+    try:
+        forward, reverse, run = record_about_edges(
+            pid,
+            diagnostics,
+            graph_root,
+            registry_root,
+            run_root,
+            timeout,
+            max_depth,
+            max_elements,
+        )
+    except Exception as exc:
+        print(f"Graph recording failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Graph run artifacts: {run}")
+    print(f"Recorded: {forward.edge_id} — {forward.action.semantic_description}")
+    print(f"Recorded: {reverse.edge_id} — {reverse.action.semantic_description}")
+    print(f"JSON export: {graph_root / 'graph.json'}")
+    print(f"GraphML export: {graph_root / 'graph.graphml'}")
+    return 0
+
+
+def run_graph_show(graph_root: Path, registry_root: Path, as_json: bool) -> int:
+    graph = graph_summary(graph_root, registry_root)
+    if as_json:
+        print(graph.model_dump_json(indent=2))
+        return 0
+    print(f"OpenVSP navigation graph — {len(graph.nodes)} nodes, {len(graph.edges)} edges")
+    for node in graph.nodes:
+        print(f"- {node.node_id}: {node.semantic_name} [{node.state_type}]")
+    for edge in graph.edges:
+        attempts = edge.replay.attempts
+        rate = edge.replay.successes / attempts if attempts else 0.0
+        print(
+            f"- {edge.edge_id}: {edge.source_node_id} -> {edge.destination_node_id}"
+            f" | {edge.action.semantic_description} | replay {edge.replay.successes}/{attempts}"
+            f" ({rate:.0%})"
+        )
+    return 0
+
+
+def run_replay(
+    edge_id: str,
+    graph_root: Path,
+    registry_root: Path,
+    replay_root: Path,
+    timeout: float,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    diagnostics = collect_diagnostics()
+    errors = _identity_preflight(diagnostics)
+    if errors:
+        print("Replay stopped before interaction.")
+        for error in errors:
+            print(f"- {error}")
+        return 2
+    pid = int(diagnostics["processes"][0]["pid"])
+    try:
+        result, run = replay_edge(
+            edge_id,
+            pid,
+            diagnostics,
+            graph_root,
+            registry_root,
+            replay_root,
+            timeout,
+            max_depth,
+            max_elements,
+        )
+    except ReplayRefused as exc:
+        print(f"Replay refused safely: {exc}")
+        return 5
+    except Exception as exc:
+        print(f"Replay failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Replay artifacts: {run}")
+    print(f"Verified destination node: {result['observed_destination_node_id']}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="app_mapper",
@@ -457,6 +563,31 @@ def build_parser() -> argparse.ArgumentParser:
     identify_parser.add_argument(
         "--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT
     )
+
+    graph_parser = subparsers.add_parser("graph", help="Record, inspect, and export graph edges.")
+    graph_subparsers = graph_parser.add_subparsers(dest="graph_command", required=True)
+    graph_record = graph_subparsers.add_parser(
+        "record-about", help="Record workspace -> About -> workspace as two verified edges."
+    )
+    graph_record.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    graph_record.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
+    graph_record.add_argument("--run-root", type=Path, default=DEFAULT_GRAPH_RUN_ROOT)
+    graph_record.add_argument("--timeout", type=float, default=8.0)
+    graph_record.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    graph_record.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+    graph_show = graph_subparsers.add_parser("show", help="Show and refresh graph exports.")
+    graph_show.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    graph_show.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
+    graph_show.add_argument("--json", action="store_true")
+
+    replay_parser = subparsers.add_parser("replay", help="Replay one recorded safe graph edge.")
+    replay_parser.add_argument("edge_id")
+    replay_parser.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    replay_parser.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
+    replay_parser.add_argument("--replay-root", type=Path, default=DEFAULT_REPLAY_ROOT)
+    replay_parser.add_argument("--timeout", type=float, default=8.0)
+    replay_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    replay_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
     return parser
 
 
@@ -509,5 +640,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     if args.command == "identify":
         return run_identify(args.observation_dir, args.registry_root)
+    if args.command == "graph":
+        if args.graph_command == "show":
+            return run_graph_show(args.graph_root, args.registry_root, args.json)
+        if args.timeout <= 0:
+            parser.error("--timeout must be positive")
+        if args.max_depth < 0 or args.max_elements < 1:
+            parser.error("--max-depth must be non-negative and --max-elements must be positive")
+        if args.graph_command == "record-about":
+            return run_graph_record_about(
+                args.graph_root,
+                args.registry_root,
+                args.run_root,
+                args.timeout,
+                args.max_depth,
+                args.max_elements,
+            )
+    if args.command == "replay":
+        if args.timeout <= 0:
+            parser.error("--timeout must be positive")
+        if args.max_depth < 0 or args.max_elements < 1:
+            parser.error("--max-depth must be non-negative and --max-elements must be positive")
+        return run_replay(
+            args.edge_id,
+            args.graph_root,
+            args.registry_root,
+            args.replay_root,
+            args.timeout,
+            args.max_depth,
+            args.max_elements,
+        )
     parser.error(f"Unknown command: {args.command}")
     return 2

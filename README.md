@@ -2,7 +2,7 @@
 
 An incremental Python prototype for observing and mapping the OpenVSP user interface on macOS.
 
-The project implements Milestones 1–4 from [PLAN.md](PLAN.md): observation, one allowlisted reversible interaction, read-only Holo interpretation, and stable state identity/deduplication. It does not modify or save an OpenVSP model.
+The project implements Milestones 1–5 from [PLAN.md](PLAN.md): observation, one allowlisted reversible interaction, Holo interpretation, stable node identity, and the first replayable graph edges. It does not modify or save an OpenVSP model.
 
 ## Development commands
 
@@ -13,6 +13,7 @@ uv run python -m app_mapper observe
 uv run python -m app_mapper exercise-about
 uv run python -m app_mapper interpret
 uv run python -m app_mapper capture-node
+uv run python -m app_mapper graph show
 uv run pytest
 ```
 
@@ -77,3 +78,35 @@ Next, move the OpenVSP windows and capture again. Hover over a control and captu
 Then manually open **OpenVSP → About vsp**, leave it open, and run the same `capture-node` command. It should be `new` with a different node ID. Close About and capture again; it should be `matched` to the original workspace node.
 
 Finally inspect `$REGISTRY/index.json`. It should normally contain exactly two nodes: one workspace node with multiple observations and one dialog node. For each capture, inspect `identity.json`: `review_required` should be `false`. If a result is `ambiguous`, it must have `node_id: null`, `review_required: true`, and candidate reasons; this is a safe refusal to merge, not a test failure in the safety mechanism.
+
+## Milestone 5 replayable graph edges
+
+Start from the normal OpenVSP workspace with no dialog open, then record the verified round trip:
+
+```bash
+uv run python -m app_mapper graph record-about
+uv run python -m app_mapper graph show
+```
+
+`graph show` should report two nodes and two directed edges:
+
+```text
+workspace --[open About]--> dialog
+dialog --[dismiss About]--> workspace
+```
+
+Copy the forward edge ID from `graph show` and replay it. A successful forward replay leaves About open so you can inspect the destination:
+
+```bash
+uv run python -m app_mapper replay <open-about-edge-id>
+```
+
+Then copy and replay the dismiss edge ID. It should close About and verify the workspace node:
+
+```bash
+uv run python -m app_mapper replay <dismiss-about-edge-id>
+```
+
+To test the source-state guard, while the normal workspace is visible, try the dismiss edge again. The command must print `Replay refused safely`, state that no action was taken, and exit with code 5. In `graph show`, that edge records the refusal separately from successful replays.
+
+Inspect `artifacts/graph/graph.json` for readable action metadata, locators, preconditions, postconditions, evidence paths, and replay statistics. `artifacts/graph/graph.graphml` is the equivalent external-tool export. Every replay stores its source and destination evidence under `artifacts/replays/`.

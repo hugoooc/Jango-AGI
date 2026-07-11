@@ -157,7 +157,13 @@ def _accessibility_summary(normalized: dict[str, Any]) -> dict[str, Any]:
             if role in INTERACTIVE_ROLES:
                 controls[role] += 1
             if role == "axwindow":
-                windows.append({"role": role, "subrole": subrole, "title": label})
+                windows.append(
+                    {
+                        "role": role,
+                        "subrole": subrole,
+                        "title": str(attributes.get("AXTitle") or ""),
+                    }
+                )
     windows.sort(key=lambda item: (item["subrole"], item["title"]))
     return {
         "stable_landmarks": sorted(landmarks)[:400],
@@ -429,6 +435,9 @@ def _update_node(node: NodeRecord, signals: dict[str, Any], registry_root: Path)
         data["semantic_description"] = signals["semantic"]["description"]
         data["state_type"] = signals["semantic"]["state_type"]
         data["semantic_source"] = "holo"
+    elif data["semantic_source"] == "deterministic":
+        data["semantic_name"] = signals["semantic"]["name"]
+        data["semantic_description"] = signals["semantic"]["description"]
     updated = NodeRecord.model_validate(data)
     write_json(
         registry_root / node.node_id / "node.json",

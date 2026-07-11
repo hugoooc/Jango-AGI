@@ -389,7 +389,7 @@ python -m app_mapper replay <edge-id>
 
 ### Status
 
-`Not started`
+`Implemented — manually validated`
 
 ## Milestone 6 — Whitelisted One-Hop Discovery
 
@@ -682,11 +682,11 @@ These should be answered through experiments instead of assumed upfront:
 | 2 | One safe, reversible interaction | Implemented — manually validated |
 | 3 | Read-only Holo interpretation | Implemented — manually validated |
 | 4 | Node identity and deduplication | Implemented — awaiting full manual matrix |
-| 5 | First replayable graph edge | Not started |
+| 5 | First replayable graph edge | Implemented — manually validated |
 | 6 | Whitelisted one-hop discovery | Not started |
 | 7 | Bounded autonomous exploration | Not started |
 | 8 | Graph viewer and validation | Not started |
 
 ## Immediate Next Step
 
-Run the Milestone 4 manual acceptance matrix in the README, paying special attention to stable IDs across move/hover captures, a distinct ID for About, and safe refusal of ambiguous matches. Do not begin Milestone 5 until those results are reviewed.
+Inspect the Milestone 5 JSON/GraphML exports and replay both recorded edges using the README procedure. Confirm the wrong-source replay is refused before beginning Milestone 6.
