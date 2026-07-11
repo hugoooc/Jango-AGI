@@ -216,7 +216,7 @@ The About dialog is the preferred target if it can be accessed reliably. Another
 
 ### Status
 
-`Not started`
+`Implemented — awaiting repeated manual validation`
 
 ## Milestone 3 — Read-Only Holo Interpretation
 

@@ -12,6 +12,7 @@ from app_mapper.config import (
     DEFAULT_ARTIFACT_ROOT,
     DEFAULT_AX_MAX_DEPTH,
     DEFAULT_AX_MAX_ELEMENTS,
+    DEFAULT_TRANSITION_ARTIFACT_ROOT,
     OPENVSP,
 )
 from app_mapper.macos.accessibility import read_application_tree
@@ -24,6 +25,7 @@ from app_mapper.macos.applications import (
 )
 from app_mapper.macos.permissions import permission_status
 from app_mapper.macos.screenshots import ScreenshotError, capture_window
+from app_mapper.transition import capture_phase, exercise_about
 
 
 def _now() -> str:
@@ -144,10 +146,73 @@ def observe(artifact_root: Path, max_depth: int, max_elements: int) -> int:
     return 0 if not errors else 3
 
 
+def run_about_transition(
+    artifact_root: Path,
+    timeout: float,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    destination = create_observation_directory(artifact_root)
+    diagnostics = collect_diagnostics()
+    manifest = {**diagnostics, "read_only": False, "interaction": "about-dialog-only"}
+    write_json(destination / "manifest.json", manifest)
+
+    errors: list[str] = []
+    if not diagnostics["target"]["installed"]:
+        errors.append("OpenVSP is not installed.")
+    if not diagnostics["running"]:
+        errors.append("OpenVSP is not running.")
+    if not diagnostics["permissions"]["screen_recording"]["granted"]:
+        errors.append("Screen Recording permission is required.")
+    if not diagnostics["permissions"]["accessibility"]["granted"]:
+        errors.append("Accessibility permission is required.")
+
+    if errors:
+        write_json(destination / "failure.json", {"errors": errors, "action_performed": False})
+        print(f"Transition stopped before interaction. Artifacts: {destination}")
+        for error in errors:
+            print(f"- {error}")
+        return 2
+
+    pid = int(diagnostics["processes"][0]["pid"])
+    try:
+        exercise_about(pid, destination, timeout, max_depth, max_elements)
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        trace_path = destination / "trace.json"
+        action_performed = False
+        if trace_path.is_file():
+            try:
+                trace = json.loads(trace_path.read_text(encoding="utf-8"))
+                action_performed = any(
+                    event.get("event") == "open_action_performed"
+                    for event in trace.get("events", [])
+                )
+            except (OSError, json.JSONDecodeError):
+                pass
+        try:
+            failure_state = capture_phase(
+                destination, "failure", pid, max_depth, max_elements
+            )
+        except Exception as capture_exc:
+            failure_state = {"errors": [f"Failure-state capture failed: {capture_exc}"]}
+        write_json(
+            destination / "failure.json",
+            {"errors": [error], "action_performed": action_performed, "state": failure_state},
+        )
+        print(f"Transition failed safely. Artifacts: {destination}")
+        print(f"- {error}")
+        return 3
+
+    print(f"Transition succeeded. Artifacts: {destination}")
+    print("Verified: main state -> About OpenVSP -> main state")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="app_mapper",
-        description="Read-only OpenVSP observation tools for macOS.",
+        description="Guarded OpenVSP observation and navigation tools for macOS.",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -163,6 +228,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     observe_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
     observe_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+
+    transition_parser = subparsers.add_parser(
+        "exercise-about",
+        help="Open and dismiss About OpenVSP, then verify the original state returned.",
+    )
+    transition_parser.add_argument(
+        "--artifact-root",
+        type=Path,
+        default=DEFAULT_TRANSITION_ARTIFACT_ROOT,
+        help=f"Transition output root (default: {DEFAULT_TRANSITION_ARTIFACT_ROOT}).",
+    )
+    transition_parser.add_argument("--timeout", type=float, default=8.0)
+    transition_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    transition_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
     return parser
 
 
@@ -176,5 +255,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.max_depth < 0 or args.max_elements < 1:
             parser.error("--max-depth must be non-negative and --max-elements must be positive")
         return observe(args.artifact_root, args.max_depth, args.max_elements)
+    if args.command == "exercise-about":
+        if args.timeout <= 0:
+            parser.error("--timeout must be positive")
+        if args.max_depth < 0 or args.max_elements < 1:
+            parser.error("--max-depth must be non-negative and --max-elements must be positive")
+        return run_about_transition(
+            args.artifact_root,
+            args.timeout,
+            args.max_depth,
+            args.max_elements,
+        )
     parser.error(f"Unknown command: {args.command}")
     return 2
