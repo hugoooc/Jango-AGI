@@ -153,6 +153,8 @@
 
 <script>
 const $ = s => document.querySelector(s);
+const CSRF_TOKEN = '__CSRF_TOKEN__';
+const POST_HEADERS = {'X-LegacyPilot-Token': CSRF_TOKEN};
 let timer = null, t0 = 0;
 let voiceId = null;
 
@@ -203,7 +205,7 @@ async function ask() {
   setBusy(true);
   let job;
   try {
-    const r = await fetch('/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({question:q})});
+    const r = await fetch('/ask', {method:'POST', headers:{...POST_HEADERS, 'Content-Type':'application/json'}, body: JSON.stringify({question:q})});
     if (!r.ok) { const e = await r.json(); return fail(e.error || 'request failed'); }
     job = (await r.json()).job_id;
   } catch (e) { return fail('server unreachable'); }
@@ -216,7 +218,7 @@ async function startListening() {
   setListening(true);
   try {
     $('#voice').disabled = true;
-    const response = await fetch('/voice/start', {method:'POST'});
+    const response = await fetch('/voice/start', {method:'POST', headers:POST_HEADERS});
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'could not start voice input');
     voiceId = payload.voice_id;
@@ -234,13 +236,12 @@ async function stopListening() {
   $('#voice').disabled = true;
   $('#statustext').textContent = 'Finalizing transcript…';
   try {
-    const response = await fetch('/voice/stop?id='+encodeURIComponent(voiceId), {method:'POST'});
+    const response = await fetch('/voice/stop?id='+encodeURIComponent(voiceId), {method:'POST', headers:POST_HEADERS});
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'could not stop voice input');
   } catch (error) {
-    voiceId = null;
-    setListening(false);
-    fail(error.message || 'could not stop voice input');
+    $('#voice').disabled = false;
+    $('#statustext').textContent = 'Could not stop — press Stop to retry.';
   }
 }
 
@@ -271,6 +272,13 @@ function toggleVoice() {
   if (voiceId) stopListening();
   else startListening();
 }
+
+window.addEventListener('pagehide', () => {
+  if (!voiceId) return;
+  fetch('/voice/stop?id='+encodeURIComponent(voiceId), {
+    method: 'POST', headers: POST_HEADERS, keepalive: true,
+  }).catch(() => {});
+});
 
 async function poll(job) {
   try {

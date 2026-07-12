@@ -28,9 +28,14 @@ class VoiceEndpointTests(unittest.TestCase):
 
         server._voice_sessions.clear()
 
-    def request_json(self, path, method="GET"):
+    def request_json(self, path, method="GET", token=True):
         data = b"{}" if method == "POST" else None
-        request = urllib.request.Request(f"{self.base}{path}", data=data, method=method)
+        headers = {}
+        if method == "POST" and token:
+            headers["X-LegacyPilot-Token"] = server.CSRF_TOKEN
+        request = urllib.request.Request(
+            f"{self.base}{path}", data=data, headers=headers, method=method,
+        )
         with urllib.request.urlopen(request, timeout=2) as response:
             return response.status, json.loads(response.read())
 
@@ -70,6 +75,26 @@ class VoiceEndpointTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as caught:
             self.request_json("/voice/start", method="POST")
         self.assertEqual(caught.exception.code, 409)
+
+    def test_post_without_request_token_is_rejected(self):
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.request_json("/voice/start", method="POST", token=False)
+        self.assertEqual(caught.exception.code, 403)
+        self.assertFalse(server._voice_busy.is_set())
+
+    def test_dashboard_receives_request_token(self):
+        with urllib.request.urlopen(f"{self.base}/", timeout=2) as response:
+            page = response.read().decode()
+        self.assertIn(server.CSRF_TOKEN, page)
+        self.assertNotIn("__CSRF_TOKEN__", page)
+
+    def test_completed_voice_sessions_expire(self):
+        server._voice_sessions["old"] = {
+            "state": "done", "finished_at": 10.0,
+        }
+        with server._lock:
+            server._prune_voice_sessions(now=10.0 + server.VOICE_SESSION_TTL)
+        self.assertNotIn("old", server._voice_sessions)
 
 
 if __name__ == "__main__":

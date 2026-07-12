@@ -20,8 +20,10 @@ Jobs run one at a time (one OpenVSP on this Mac). A second ask while busy is
 rejected with a clear message.
 """
 import asyncio
+import hmac
 import json
 import os
+import secrets
 import sys
 import threading
 import time
@@ -34,6 +36,9 @@ from sdk_product.voice import gradium_api_key, transcribe_microphone  # noqa: E4
 
 HERE = os.path.dirname(__file__)
 PORT = int(os.environ.get("LP_PORT", "8765"))
+VOICE_MAX_SECONDS = float(os.environ.get("LP_VOICE_MAX_SECONDS", "300"))
+VOICE_SESSION_TTL = float(os.environ.get("LP_VOICE_SESSION_TTL", "300"))
+CSRF_TOKEN = secrets.token_urlsafe(32)
 
 _jobs = {}                      # job_id -> {state, report, error, seconds, question}
 _voice_sessions = {}            # voice_id -> internal capture state
@@ -66,7 +71,8 @@ def _run_job(job_id, question, slow):
 def _capture_voice(stop_signal, on_text):
     """Stream until Stop is requested; kept separate for deterministic tests."""
     return asyncio.run(transcribe_microphone(
-        gradium_api_key(), max_seconds=None, stop_signal=stop_signal, on_text=on_text,
+        gradium_api_key(), max_seconds=VOICE_MAX_SECONDS,
+        stop_signal=stop_signal, on_text=on_text,
     ))
 
 
@@ -93,11 +99,30 @@ def _run_voice(voice_id):
                 state="error", error=f"{type(exc).__name__}: {exc}",
             )
     finally:
+        with _lock:
+            session = _voice_sessions.get(voice_id)
+            if session:
+                session["finished_at"] = time.monotonic()
         _voice_busy.clear()
 
 
 def _public_voice(session):
     return {key: session.get(key) for key in ("state", "transcript", "error")}
+
+
+def _prune_voice_sessions(now=None):
+    """Drop completed captures after a short result-retrieval window.
+
+    Caller must hold ``_lock``.
+    """
+    now = time.monotonic() if now is None else now
+    expired = [
+        voice_id for voice_id, session in _voice_sessions.items()
+        if session.get("finished_at") is not None
+        and now - session["finished_at"] >= VOICE_SESSION_TTL
+    ]
+    for voice_id in expired:
+        del _voice_sessions[voice_id]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -112,11 +137,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _csrf_is_valid(self):
+        supplied = self.headers.get("X-LegacyPilot-Token", "")
+        return bool(supplied) and hmac.compare_digest(supplied, CSRF_TOKEN)
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/":
             with open(os.path.join(HERE, "index.html"), "rb") as f:
-                self._send(200, f.read(), "text/html; charset=utf-8")
+                page = f.read().replace(b"__CSRF_TOKEN__", CSRF_TOKEN.encode())
+                self._send(200, page, "text/html; charset=utf-8")
         elif path == "/examples":
             self._send(200, json.dumps(EXAMPLES))
         elif path == "/status":
@@ -132,6 +162,7 @@ class Handler(BaseHTTPRequestHandler):
             qs = parse_qs(urlparse(self.path).query)
             voice_id = (qs.get("id") or [""])[0]
             with _lock:
+                _prune_voice_sessions()
                 session = _voice_sessions.get(voice_id)
                 public = _public_voice(session) if session else None
             if not public:
@@ -142,6 +173,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
+        if not self._csrf_is_valid():
+            self._send(403, json.dumps({"error": "invalid request token"}))
+            return
         path = urlparse(self.path).path
         if path == "/voice/start":
             self._handle_voice_start()
@@ -178,6 +212,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _handle_voice_start(self):
         with _lock:
+            _prune_voice_sessions()
             unavailable = _busy.is_set() or _voice_busy.is_set()
             if not unavailable:
                 _voice_busy.set()
