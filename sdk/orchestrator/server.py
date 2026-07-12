@@ -27,6 +27,7 @@ def _load_env() -> None:
 _load_env()
 
 from . import docker_fleet as fleet  # noqa: E402
+from . import agent  # noqa: E402
 
 
 def _dispatch(items: list[fleet.Worker], values: list[float] | None, mode: str) -> list[dict]:
@@ -155,6 +156,19 @@ class Handler(BaseHTTPRequestHandler):
                 if not values:
                     raise ValueError("sweep requires a non-empty 'values' list")
                 self._json(200, _parallel_mass_sweep(values))
+                return
+            if path == "/api/ask":
+                # ASK: the agent plans from plain language, then dispatches the
+                # fleet (spins up exactly the workers it needs) and waits.
+                question = str(payload.get("question", ""))
+                decision = agent.plan(question, max_workers=fleet.MAX_WORKERS)
+                if not decision.get("ok"):
+                    self._json(400, {"error": decision.get("error", "could not plan")})
+                    return
+                result = _parallel_mass_sweep(decision["values"])
+                result["question"] = question
+                result["plan"] = decision["note"]
+                self._json(200, result)
                 return
             self._json(404, {"error": "not found"})
         except (ValueError, RuntimeError, json.JSONDecodeError) as exc:

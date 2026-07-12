@@ -6,12 +6,24 @@
 <style>
 :root{color-scheme:dark;--bg:#091019;--panel:#111c28;--line:#223348;--ink:#edf6ff;--muted:#8da1b5;--accent:#67e8c2;--danger:#ff8d7d}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -20%,#16324a,var(--bg) 50%);color:var(--ink);font-family:Inter,system-ui,sans-serif}.wrap{max-width:1180px;margin:auto;padding:38px 24px 80px}h1{margin:0;font-size:25px}.tag{color:var(--muted);margin:5px 0 28px}.controls{display:flex;gap:12px;flex-wrap:wrap;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px}.controls label{display:flex;align-items:center;gap:8px;color:var(--muted)}input{background:#09131e;border:1px solid var(--line);color:var(--ink);padding:10px;border-radius:8px}button,a.button{border:0;border-radius:8px;padding:10px 14px;background:var(--accent);color:#032018;font-weight:700;cursor:pointer;text-decoration:none}button.secondary,a.secondary{background:#26384c;color:var(--ink)}button.danger{background:var(--danger);color:#2d0803}.status{min-height:24px;margin:16px 3px;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}.worker{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}.head{padding:12px 14px;display:flex;align-items:center;justify-content:space-between}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:7px}.screen{display:block;width:100%;aspect-ratio:16/10;object-fit:contain;background:#000;border-top:1px solid var(--line)}.links{display:flex;gap:8px}.links a{font-size:12px;padding:7px 9px}.empty{color:var(--muted);padding:60px 0;text-align:center}code{color:var(--accent)}
+.chip{font-size:12.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}.chip:hover{color:var(--ink);border-color:var(--accent)}
 </style>
 </head>
 <body><main class="wrap">
 <h1>LegacyPilot · OpenVSP Fleet</h1>
-<p class="tag">Independent OpenVSP GUIs · pixels in, mouse and keyboard out · no application API</p>
-<section class="controls">
+<p class="tag">Ask in plain language · the agent spins up the workers it needs and runs the simulations in parallel · GUI-only, no application API</p>
+<section class="controls" style="align-items:center">
+  <input id="q" placeholder="e.g. sweep the wingspan from 8 to 20 in 6 points and plot the mass"
+         style="flex:1;min-width:340px;font-size:15px" onkeydown="if(event.key==='Enter')askAgent()">
+  <button onclick="askAgent()" style="font-size:15px">Ask the fleet →</button>
+</section>
+<div class="chips" style="margin:10px 3px 0;display:flex;gap:8px;flex-wrap:wrap">
+  <span class="chip" onclick="fill(this)">Sweep the wingspan from 8 to 20 in 6 points and plot the mass</span>
+  <span class="chip" onclick="fill(this)">How does mass change as wingspan goes from 10 to 40?</span>
+  <span class="chip" onclick="fill(this)">Compare the mass at wingspans 10, 14, 18, 22</span>
+</div>
+<details style="margin:14px 3px 0;color:var(--muted)"><summary style="cursor:pointer">Advanced / manual controls</summary>
+<section class="controls" style="margin-top:10px">
   <label>Workers <input id="count" type="number" min="1" max="12" value="2" size="3"></label>
   <button onclick="start()">Start workers</button>
   <button class="secondary" onclick="smoke()">Visual smoke test</button>
@@ -19,7 +31,7 @@
   <button class="secondary" onclick="spans()">Run vision task</button>
   <button onclick="sweep()">⚡ Parallel mass sweep</button>
   <button class="danger" onclick="stopAll()">Stop all</button>
-</section>
+</section></details>
 <div class="status" id="status">Ready.</div>
 <section id="chart"></section>
 <section class="grid" id="grid"></section>
@@ -33,6 +45,8 @@ async function smoke(){try{busy('Sending independent GUI actions…');const out=
 async function spans(){try{const values=$('#values').value.split(',').map(x=>+x.trim()).filter(Number.isFinite);busy('Holo is grounding controls and applying wing spans…');const out=await api('/api/runs',{mode:'wing_span',values});watch(out.runs);busy('Vision tasks dispatched. Watch each desktop live.')}catch(e){busy(e.message)}}
 async function stopAll(){try{await api('/api/workers/stop',{});await load();busy('All worker containers stopped.')}catch(e){busy(e.message)}}
 async function sweep(){try{const values=$('#values').value.split(',').map(x=>+x.trim()).filter(Number.isFinite);if(!values.length)return busy('Enter wing span values, e.g. 8, 12, 16, 20');busy(`Running ${values.length} simulations in parallel across the fleet…`);const t0=Date.now();const out=await api('/api/sweep',{values});busy(`Parallel sweep done: ${out.points.length} points across ${out.workers} workers in ${out.seconds}s (vs ~${(out.points.length*out.seconds/Math.max(out.workers,1)).toFixed(0)}s sequential).`);drawChart(out)}catch(e){busy(e.message)}}
+function fill(el){$('#q').value=el.textContent;askAgent()}
+async function askAgent(){const q=$('#q').value.trim();if(!q)return busy('Ask a question, e.g. "sweep the wingspan from 8 to 20 in 6 points".');try{busy('🧠 Agent is planning, spinning up workers, and running simulations in parallel… watch the live desktops below.');load();const out=await api('/api/ask',{question:q});const seq=(out.points.length*out.seconds/Math.max(out.workers,1)).toFixed(0);busy(`✅ ${out.plan}. Ran on ${out.workers} parallel workers in ${out.seconds}s (≈${seq}s if done one-by-one).`);drawChart(out)}catch(e){busy('⚠️ '+e.message)}}
 function drawChart(out){const pts=out.points.filter(p=>p.y!=null).sort((a,b)=>a.x-b.x);const el=$('#chart');if(!pts.length){el.innerHTML='';return}const W=900,H=280,P=46;const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);const xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);const sx=x=>P+(xmax===xmin?.5:(x-xmin)/(xmax-xmin))*(W-2*P);const sy=y=>H-P-(ymax===ymin?.5:(y-ymin)/(ymax-ymin))*(H-2*P);const path=pts.map((p,i)=>(i?'L':'M')+sx(p.x).toFixed(1)+' '+sy(p.y).toFixed(1)).join(' ');const dots=pts.map(p=>`<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="4.5" fill="#67e8c2" stroke="#091019" stroke-width="1.5"><title>span ${p.x} → mass ${p.y} (worker ${p.worker})</title></circle>`).join('');let grid='';for(let i=0;i<=3;i++){const y=ymin+(ymax-ymin)*i/3,py=sy(y);grid+=`<line x1="${P}" y1="${py}" x2="${W-P}" y2="${py}" stroke="#223348"/><text x="${P-8}" y="${py+4}" fill="#8da1b5" font-size="11" text-anchor="end">${y.toFixed(1)}</text>`}const xl=`<text x="${P}" y="${H-14}" fill="#8da1b5" font-size="11">${xmin}</text><text x="${W-P}" y="${H-14}" fill="#8da1b5" font-size="11" text-anchor="end">${xmax}</text><text x="${W/2}" y="${H-14}" fill="#8da1b5" font-size="11" text-anchor="middle">wing span (m)</text>`;el.innerHTML=`<div style="background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px"><div style="color:var(--ink);font-weight:700;margin-bottom:4px">Mass vs wing span · ${pts.length} points, ${out.workers} parallel workers, ${out.seconds}s</div><div style="color:var(--muted);font-size:13px;margin-bottom:8px">Every point ran on its own OpenVSP container simultaneously — GUI-driven, no API.</div><svg viewBox="0 0 ${W} ${H}" style="width:100%"><text x="8" y="${H/2}" fill="#8da1b5" font-size="11" transform="rotate(-90 8 ${H/2})" text-anchor="middle">mass</text>${grid}<path d="${path}" fill="none" stroke="#67e8c2" stroke-width="2.5"/>${dots}${xl}</svg></div>`}
 function watch(runs){for(const run of runs){if(run.job_id)poll(run.worker.index,run.job_id)}}
 async function poll(index,id){try{const j=await api(`/api/workers/${index}/jobs/${id}`);if(j.state==='running')return setTimeout(()=>poll(index,id),700);await load();busy(j.state==='done'?`Worker ${index} completed in ${j.seconds}s.`:`Worker ${index}: ${j.error}`)}catch(e){busy(e.message)}}
