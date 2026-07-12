@@ -45,6 +45,10 @@ def _llm_parse(question):
     )
     try:
         ans = d.ask(prompt, image=None, max_tokens=500)
+    except RuntimeError as exc:
+        if "Holo authentication failed" in str(exc) or "Holo API key missing" in str(exc):
+            raise
+        return None
     except Exception:
         return None
     m = re.search(r"\{.*\}", ans or "", re.S)

@@ -169,3 +169,24 @@ The goal is simple: transform successful interaction into durable operational kn
 ---
 
 **LegacyPilot — Teach once. Operate forever.**
+
+## Local voice interface
+
+The localhost dashboard accepts typed and spoken engineering requests. Voice
+audio is captured on the Mac running the server and streamed to Gradium; API
+keys stay in the local Python process and are never sent to the browser.
+
+From the repository root:
+
+```bash
+source .venv/bin/activate
+cd sdk
+uv pip install -r requirements-voice.txt
+cp .env.example .env
+# Fill GRADIUM_API_KEY and HCOMPANY_API_KEY in sdk/.env
+python -m ui.server
+```
+
+Open `http://localhost:8765`, then type a question or select **Voice**. A voice
+request records a fixed 10-second turn, inserts the Gradium transcript into the
+question field, and submits it through the same `engine.ask` path as typed input.

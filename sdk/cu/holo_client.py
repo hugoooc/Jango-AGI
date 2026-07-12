@@ -26,15 +26,21 @@ _COORD_RE = re.compile(r'"x"\s*:\s*(-?\d+).*?"y"\s*:\s*(-?\d+)', re.S)
 
 
 def _key():
-    k = os.environ.get("HCOMPANY_API_KEY")
+    k = os.environ.get("HCOMPANY_API_KEY") or os.environ.get("HAI_API_KEY")
     if not k:
-        env = os.path.join(os.path.dirname(__file__), "..", ".env")
-        if os.path.exists(env):
+        here = os.path.dirname(__file__)
+        for env in (os.path.join(here, "..", ".env"),
+                    os.path.join(here, "..", "..", ".env")):
+            if not os.path.exists(env):
+                continue
             for line in open(env):
-                if line.startswith("HCOMPANY_API_KEY="):
-                    k = line.split("=", 1)[1].strip()
+                if line.startswith(("HCOMPANY_API_KEY=", "HAI_API_KEY=")):
+                    k = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+            if k:
+                break
     if not k:
-        raise RuntimeError("HCOMPANY_API_KEY not set")
+        raise RuntimeError("HCOMPANY_API_KEY / HAI_API_KEY not set")
     return k
 
 

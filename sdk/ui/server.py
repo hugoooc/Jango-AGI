@@ -10,12 +10,14 @@ and a chart.
 Endpoints:
   GET  /              the dashboard page
   POST /ask           {question, slow?} -> {job_id}   (starts a background job)
+  POST /voice         {} -> {transcript}              (captures one microphone turn)
   GET  /status?id=..  -> {state, report|error, seconds}
   GET  /examples      -> a few ready-made questions
 
 Jobs run one at a time (one OpenVSP on this Mac). A second ask while busy is
 rejected with a clear message.
 """
+import asyncio
 import json
 import os
 import sys
@@ -26,6 +28,7 @@ from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import engine  # noqa: E402
+from sdk_product.voice import gradium_api_key, transcribe_microphone  # noqa: E402
 
 HERE = os.path.dirname(__file__)
 PORT = int(os.environ.get("LP_PORT", "8765"))
@@ -33,6 +36,7 @@ PORT = int(os.environ.get("LP_PORT", "8765"))
 _jobs = {}                      # job_id -> {state, report, error, seconds, question}
 _lock = threading.Lock()
 _busy = threading.Event()       # only one OpenVSP job at a time
+_voice_busy = threading.Event() # only one microphone capture at a time
 
 
 EXAMPLES = [
@@ -54,6 +58,11 @@ def _run_job(job_id, question, slow):
             _jobs[job_id].update(state="error", error=f"{type(e).__name__}: {e}")
     finally:
         _busy.clear()
+
+
+def _capture_voice():
+    """Capture one turn on the server Mac; kept separate for deterministic tests."""
+    return asyncio.run(transcribe_microphone(gradium_api_key()))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -88,7 +97,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
-        if urlparse(self.path).path != "/ask":
+        path = urlparse(self.path).path
+        if path == "/voice":
+            self._handle_voice()
+            return
+        if path != "/ask":
             self._send(404, json.dumps({"error": "not found"}))
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -100,10 +113,13 @@ class Handler(BaseHTTPRequestHandler):
         if not question:
             self._send(400, json.dumps({"error": "empty question"}))
             return
-        if _busy.is_set():
-            self._send(409, json.dumps({"error": "busy — a job is already running"}))
+        with _lock:
+            unavailable = _busy.is_set() or _voice_busy.is_set()
+            if not unavailable:
+                _busy.set()
+        if unavailable:
+            self._send(409, json.dumps({"error": "busy — LegacyPilot is already running"}))
             return
-        _busy.set()
         job_id = str(int(time.time() * 1000))
         with _lock:
             _jobs[job_id] = {"state": "running", "question": question,
@@ -111,6 +127,22 @@ class Handler(BaseHTTPRequestHandler):
         threading.Thread(target=_run_job, args=(job_id, question, bool(payload.get("slow"))),
                          daemon=True).start()
         self._send(200, json.dumps({"job_id": job_id}))
+
+    def _handle_voice(self):
+        with _lock:
+            unavailable = _busy.is_set() or _voice_busy.is_set()
+            if not unavailable:
+                _voice_busy.set()
+        if unavailable:
+            self._send(409, json.dumps({"error": "busy — LegacyPilot is already running"}))
+            return
+        try:
+            transcript = _capture_voice()
+            self._send(200, json.dumps({"transcript": transcript}))
+        except Exception as exc:
+            self._send(500, json.dumps({"error": f"{type(exc).__name__}: {exc}"}))
+        finally:
+            _voice_busy.clear()
 
 
 def main():

@@ -16,6 +16,7 @@ import time
 import json
 import base64
 import subprocess
+import sys
 import urllib.request
 import urllib.error
 
@@ -31,12 +32,23 @@ _COORD_RE = re.compile(r'"x"\s*:\s*(-?\d+).*?"y"\s*:\s*(-?\d+)', re.S)
 
 
 def _key():
-    k = os.environ.get("HCOMPANY_API_KEY")
+    k = os.environ.get("HCOMPANY_API_KEY") or os.environ.get("HAI_API_KEY")
     if not k:
-        env = os.path.join(HERE, "..", ".env")
-        for line in open(env):
-            if line.startswith("HCOMPANY_API_KEY="):
-                k = line.split("=", 1)[1].strip()
+        env_files = (
+            os.path.join(HERE, "..", ".env"),
+            os.path.join(HERE, "..", "..", ".env"),
+        )
+        for env in env_files:
+            if not os.path.exists(env):
+                continue
+            for line in open(env, encoding="utf-8"):
+                if line.startswith(("HCOMPANY_API_KEY=", "HAI_API_KEY=")):
+                    k = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+            if k:
+                break
+    if not k:
+        raise RuntimeError("Holo API key missing: set HCOMPANY_API_KEY or HAI_API_KEY")
     return k
 
 
@@ -49,7 +61,7 @@ def logical_size():
 
 def _logical_size():
     out = subprocess.check_output([
-        os.path.join(HERE, "..", ".venv", "bin", "python"), "-c",
+        sys.executable, "-c",
         "import pyautogui,sys; s=pyautogui.size(); sys.stdout.write(f'{s.width} {s.height}')"
     ]).decode()
     w, h = out.split()
@@ -88,6 +100,14 @@ def _post(payload, timeout=25, retries=2, wall_clock=45):
             remaining = max(1, wall_clock - (time.time() - start))
             with urllib.request.urlopen(req, timeout=min(timeout, remaining)) as r:
                 return json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                raise RuntimeError(
+                    "Holo authentication failed: set a key accepted by "
+                    "https://api.hcompany.ai/v1 in HCOMPANY_API_KEY"
+                ) from e
+            last = e
+            time.sleep(min(1.5 * (attempt + 1), max(0, wall_clock - (time.time() - start))))
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             last = e
             time.sleep(min(1.5 * (attempt + 1), max(0, wall_clock - (time.time() - start))))

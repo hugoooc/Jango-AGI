@@ -50,6 +50,7 @@
   .ask input {
     flex: 1; background: transparent; border: 0; outline: 0;
     color: var(--ink); font-size: 16px; font-family: var(--sans); padding: 12px 0;
+    min-width: 0;
   }
   .ask input::placeholder { color: #5a6472; }
   .go {
@@ -59,6 +60,21 @@
   }
   .go:hover { transform: translateY(-1px); }
   .go:disabled { opacity: .4; cursor: default; transform: none; }
+  .voice {
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+    cursor: pointer; font-weight: 600; font-size: 13px; padding: 10px 13px;
+    border-radius: 10px; display: flex; align-items: center; gap: 7px;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .voice:hover { color: var(--ink); border-color: var(--accent-dim); }
+  .voice:disabled { opacity: .45; cursor: default; }
+  .voice-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 0 rgba(94,208,180,.35);
+  }
+  .voice.listening { color: var(--ink); border-color: var(--up); background: #241918; }
+  .voice.listening .voice-dot { background: var(--up); animation: pulse 1.2s ease-out infinite; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(240,128,108,0); } }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 2px 0; }
   .chip {
@@ -116,20 +132,23 @@
     <div class="logo">L</div>
     <h1>LegacyPilot</h1>
   </header>
-  <div class="tag">Ask a design question — it drives OpenVSP on this machine and answers.</div>
+  <div class="tag">Type or speak a design question — LegacyPilot operates OpenVSP and answers.</div>
 
   <div class="ask">
     <input id="q" placeholder="e.g. impact on mass if the wingspan goes to 12m?" autofocus />
+    <button class="voice" id="voice" type="button" aria-label="Speak a design question" aria-pressed="false">
+      <span class="voice-dot" aria-hidden="true"></span><span>Voice</span>
+    </button>
     <button class="go" id="go">Ask</button>
   </div>
   <div class="chips" id="chips"></div>
 
-  <div class="status" id="status">
+  <div class="status" id="status" role="status" aria-live="polite">
     <div class="spinner"></div>
     <div><span id="statustext">Driving OpenVSP…</span> <span class="hint">watch the desktop · <span id="elapsed">0</span>s</span></div>
   </div>
 
-  <div class="card" id="card"></div>
+  <div class="card" id="card" aria-live="polite"></div>
 </div>
 
 <script>
@@ -151,6 +170,7 @@ async function loadExamples() {
 
 function setBusy(b) {
   $('#go').disabled = b;
+  $('#voice').disabled = b;
   $('#status').classList.toggle('show', b);
   if (b) { t0 = Date.now(); timer = setInterval(() => $('#elapsed').textContent = Math.round((Date.now()-t0)/1000), 250); }
   else { clearInterval(timer); }
@@ -160,6 +180,7 @@ async function ask() {
   const q = $('#q').value.trim();
   if (!q) return;
   $('#card').classList.remove('show');
+  $('#statustext').textContent = 'Driving OpenVSP…';
   setBusy(true);
   let job;
   try {
@@ -168,6 +189,28 @@ async function ask() {
     job = (await r.json()).job_id;
   } catch (e) { return fail('server unreachable'); }
   poll(job);
+}
+
+async function listen() {
+  const button = $('#voice');
+  $('#card').classList.remove('show');
+  button.classList.add('listening');
+  button.setAttribute('aria-pressed', 'true');
+  $('#statustext').textContent = 'Listening for 10 seconds…';
+  setBusy(true);
+  try {
+    const response = await fetch('/voice', {method:'POST'});
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'voice capture failed');
+    $('#q').value = payload.transcript;
+  } catch (error) {
+    return fail(error.message || 'voice capture failed');
+  } finally {
+    button.classList.remove('listening');
+    button.setAttribute('aria-pressed', 'false');
+    setBusy(false);
+  }
+  ask();
 }
 
 async function poll(job) {
@@ -263,6 +306,7 @@ function barChart(data) {
 }
 
 $('#go').onclick = ask;
+$('#voice').onclick = listen;
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
 loadExamples();
 </script>
