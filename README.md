@@ -2,7 +2,7 @@
 
 An incremental Python prototype for observing and mapping the OpenVSP user interface on macOS.
 
-The project implements Milestones 1–7 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, graph edges, whitelisted discovery, and bounded resumable exploration. It does not modify or save an OpenVSP model.
+The project implements Milestones 1–8 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, graph edges, whitelisted discovery, bounded resumable exploration, graph inspection, and replay validation. It does not modify or save an OpenVSP model.
 
 ## Development commands
 
@@ -14,6 +14,8 @@ uv run python -m app_mapper exercise-about
 uv run python -m app_mapper interpret
 uv run python -m app_mapper capture-node
 uv run python -m app_mapper graph show
+uv run python -m app_mapper graph viewer
+uv run python -m app_mapper validate --sample-size 5
 uv run python -m app_mapper discover-one-hop
 uv run python -m app_mapper explore --max-depth 1 --max-nodes 10 --max-actions 18
 uv run pytest
@@ -190,3 +192,30 @@ Inspect the printed `state.json`. Every task should be `succeeded`, `return_veri
 As a replay sample, copy the workspace-to-File edge ID from `graph show` and run `uv run python -m app_mapper replay <edge-id>`. It should verify the File-menu destination node. macOS may automatically cancel a menu when that replay process exits, which is a safe return to the workspace.
 
 You may press Ctrl+C during a run. The explorer attempts the allowlisted reverse action, persists `paused` state, and prints a resumable run path. Process and focus changes stop the run safely. `--allow-relaunch` is deliberately opt-in and should only be used with the required blank unsaved model because it may terminate and reopen OpenVSP.
+
+## Milestone 8 graph viewer and validation
+
+Generate the read-only viewer from the graph you already mapped:
+
+```bash
+uv run python -m app_mapper graph viewer
+open artifacts/viewer/index.html
+```
+
+The HTML is self-contained, including the representative node screenshots. Select nodes to inspect their screenshot, type, semantic description, observations, and control counts. Select an arrow to inspect its exact action, Accessibility locator, risk, confidence, preconditions, expected destination, evidence, and replay success rate. The lower panels make duplicate candidates, failed transitions, rejected controls, and unexplored controls visible. The metric cards report mapped-state coverage, evidence-backed edges, control coverage, and cumulative replay reliability.
+
+For the live acceptance test, start from the blank `Unnamed.vsp3` workspace with no menu or dialog open, then run:
+
+```bash
+uv run python -m app_mapper validate --sample-size 5 --seed 8
+```
+
+The validator reproducibly samples five safe forward edges. For every edge it verifies or restores the required source state, executes the recorded action, verifies the destination node, and follows a safe recorded path back to the source. Watch for five `success` lines and `Reliability: 5/5 (100%)`. Open the newest `artifacts/validations/<timestamp>/validation.json` and confirm each result has `source_restored`, `destination_verified`, and `return_verified` set to true. A changed UI is explicitly classified as `drift`, `stale_locator`, or `ambiguous_state`; failures remain visible in the next generated viewer.
+
+To validate a particular edge instead of a random sample, repeat `--edge` as needed:
+
+```bash
+uv run python -m app_mapper validate --edge edge-cdd72807684a
+```
+
+Validation performs only recorded `safe_navigation`, reversible actions. It does not select commands inside menus or modify the model. Confirm the command finishes back at `Unnamed.vsp3` with no geometry present, then regenerate the viewer so its reliability metrics include the new attempts.

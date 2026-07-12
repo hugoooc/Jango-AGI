@@ -543,7 +543,7 @@ Make the graph easy to inspect and measure its replay reliability.
 
 ### Status
 
-`Not started`
+`Implemented — awaiting manual validation`
 
 ## Likely Technical Stack
 
@@ -685,8 +685,8 @@ These should be answered through experiments instead of assumed upfront:
 | 5 | First replayable graph edge | Implemented — manually validated |
 | 6 | Whitelisted one-hop discovery | Implemented — manually validated |
 | 7 | Bounded autonomous exploration | Implemented — manually validated |
-| 8 | Graph viewer and validation | Not started |
+| 8 | Graph viewer and validation | Implemented — awaiting manual validation |
 
 ## Immediate Next Step
 
-Review the completed Milestone 7 state, traces, and graph bounds, then build the Milestone 8 graph viewer and validation metrics.
+Run the Milestone 8 five-edge validation sample, inspect the self-contained viewer, and confirm OpenVSP returns to the unchanged blank workspace.

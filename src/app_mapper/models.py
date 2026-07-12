@@ -256,3 +256,43 @@ class ExplorationState(StrictModel):
     tasks_completed: int = Field(default=0, ge=0)
     elapsed_seconds: float = Field(default=0.0, ge=0.0)
     stop_reason: str | None = None
+
+
+class ValidationEdgeResult(StrictModel):
+    edge_id: str
+    source_node_id: str
+    destination_node_id: str
+    action: str
+    status: Literal[
+        "success",
+        "failure",
+        "drift",
+        "stale_locator",
+        "ambiguous_state",
+        "unsafe",
+    ]
+    started_at: str
+    completed_at: str
+    replay_path: str | None = None
+    restoration_edge_ids: list[str] = Field(default_factory=list)
+    source_restored: bool = False
+    destination_verified: bool = False
+    return_verified: bool = False
+    observed_destination_node_id: str | None = None
+    error: str | None = None
+
+
+class ValidationRecord(StrictModel):
+    schema_version: Literal[1] = 1
+    run_id: str
+    run_path: str
+    started_at: str
+    completed_at: str | None = None
+    graph_root: str
+    registry_root: str
+    sample_size: int = Field(ge=1)
+    seed: int
+    sampled_edge_ids: list[str]
+    results: list[ValidationEdgeResult] = Field(default_factory=list)
+    summary: dict[str, int | float] = Field(default_factory=dict)
+    success: bool = False

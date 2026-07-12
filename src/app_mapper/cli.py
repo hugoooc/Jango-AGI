@@ -21,6 +21,8 @@ from app_mapper.config import (
     DEFAULT_NODE_REGISTRY_ROOT,
     DEFAULT_REPLAY_ROOT,
     DEFAULT_TRANSITION_ARTIFACT_ROOT,
+    DEFAULT_VALIDATION_ROOT,
+    DEFAULT_VIEWER_ROOT,
     OPENVSP,
 )
 from app_mapper.exploration import create_exploration, load_exploration, run_exploration
@@ -51,6 +53,8 @@ from app_mapper.macos.permissions import permission_status
 from app_mapper.macos.screenshots import ScreenshotError, capture_window
 from app_mapper.models import ExplorationBounds
 from app_mapper.transition import capture_phase, exercise_about
+from app_mapper.validation import validate_graph
+from app_mapper.viewer import generate_viewer
 
 
 def _now() -> str:
@@ -454,6 +458,82 @@ def run_graph_show(graph_root: Path, registry_root: Path, as_json: bool) -> int:
     return 0
 
 
+def run_graph_viewer(
+    output_root: Path,
+    graph_root: Path,
+    registry_root: Path,
+    discovery_root: Path,
+    exploration_root: Path,
+    validation_root: Path,
+) -> int:
+    try:
+        destination = generate_viewer(
+            output_root,
+            graph_root,
+            registry_root,
+            discovery_root,
+            exploration_root,
+            validation_root,
+        )
+    except Exception as exc:
+        print(f"Viewer generation failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Graph viewer: {destination.resolve()}")
+    print("Open that HTML file in a browser; it is self-contained and performs no UI actions.")
+    return 0
+
+
+def run_validation(
+    graph_root: Path,
+    registry_root: Path,
+    validation_root: Path,
+    sample_size: int,
+    seed: int,
+    edge_ids: list[str] | None,
+    timeout: float,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    diagnostics = collect_diagnostics()
+    errors = _identity_preflight(diagnostics)
+    if diagnostics["running"] and not list_windows(int(diagnostics["processes"][0]["pid"])):
+        errors.append("OpenVSP has no visible windows.")
+    if errors:
+        print("Validation stopped before interaction.")
+        for error in errors:
+            print(f"- {error}")
+        return 2
+    pid = int(diagnostics["processes"][0]["pid"])
+    try:
+        record, run = validate_graph(
+            pid,
+            diagnostics,
+            graph_root,
+            registry_root,
+            validation_root,
+            sample_size=sample_size,
+            seed=seed,
+            edge_ids=edge_ids,
+            timeout=timeout,
+            max_depth=max_depth,
+            max_elements=max_elements,
+        )
+    except Exception as exc:
+        print(f"Validation failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Validation artifacts: {run}")
+    for result in record.results:
+        print(f"- {result.edge_id}: {result.status} | {result.action}")
+    print(
+        f"Reliability: {record.summary['success']}/{record.summary['attempted']} "
+        f"({record.summary['reliability']:.0%})"
+    )
+    for label in ("drift", "stale_locator", "ambiguous_state", "failure", "unsafe"):
+        if record.summary[label]:
+            print(f"{label.replace('_', ' ').title()}: {record.summary[label]}")
+    return 0 if record.success else 4
+
+
 def run_replay(
     edge_id: str,
     graph_root: Path,
@@ -738,6 +818,15 @@ def build_parser() -> argparse.ArgumentParser:
     graph_show.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
     graph_show.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
     graph_show.add_argument("--json", action="store_true")
+    graph_viewer = graph_subparsers.add_parser(
+        "viewer", help="Generate a self-contained local HTML graph viewer."
+    )
+    graph_viewer.add_argument("--output-root", type=Path, default=DEFAULT_VIEWER_ROOT)
+    graph_viewer.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    graph_viewer.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
+    graph_viewer.add_argument("--discovery-root", type=Path, default=DEFAULT_DISCOVERY_ROOT)
+    graph_viewer.add_argument("--exploration-root", type=Path, default=DEFAULT_EXPLORATION_ROOT)
+    graph_viewer.add_argument("--validation-root", type=Path, default=DEFAULT_VALIDATION_ROOT)
 
     replay_parser = subparsers.add_parser("replay", help="Replay one recorded safe graph edge.")
     replay_parser.add_argument("edge_id")
@@ -747,6 +836,23 @@ def build_parser() -> argparse.ArgumentParser:
     replay_parser.add_argument("--timeout", type=float, default=8.0)
     replay_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
     replay_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+
+    validation_parser = subparsers.add_parser(
+        "validate", help="Sample and replay safe graph edges, restoring each source state."
+    )
+    validation_parser.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    validation_parser.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
+    validation_parser.add_argument(
+        "--validation-root", type=Path, default=DEFAULT_VALIDATION_ROOT
+    )
+    validation_parser.add_argument("--sample-size", type=int, default=5)
+    validation_parser.add_argument("--seed", type=int, default=8)
+    validation_parser.add_argument(
+        "--edge", dest="edge_ids", action="append", help="Validate an exact edge ID; repeatable."
+    )
+    validation_parser.add_argument("--timeout", type=float, default=8.0)
+    validation_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    validation_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
 
     discovery_parser = subparsers.add_parser(
         "discover-one-hop",
@@ -845,6 +951,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "graph":
         if args.graph_command == "show":
             return run_graph_show(args.graph_root, args.registry_root, args.json)
+        if args.graph_command == "viewer":
+            return run_graph_viewer(
+                args.output_root,
+                args.graph_root,
+                args.registry_root,
+                args.discovery_root,
+                args.exploration_root,
+                args.validation_root,
+            )
         if args.timeout <= 0:
             parser.error("--timeout must be positive")
         if args.max_depth < 0 or args.max_elements < 1:
@@ -868,6 +983,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.graph_root,
             args.registry_root,
             args.replay_root,
+            args.timeout,
+            args.max_depth,
+            args.max_elements,
+        )
+    if args.command == "validate":
+        if args.sample_size < 1:
+            parser.error("--sample-size must be positive")
+        if args.timeout <= 0 or args.max_depth < 0 or args.max_elements < 1:
+            parser.error("timeout/elements must be positive and AX depth non-negative")
+        return run_validation(
+            args.graph_root,
+            args.registry_root,
+            args.validation_root,
+            args.sample_size,
+            args.seed,
+            args.edge_ids,
             args.timeout,
             args.max_depth,
             args.max_elements,
