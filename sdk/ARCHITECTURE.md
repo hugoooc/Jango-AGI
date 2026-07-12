@@ -1,13 +1,13 @@
-# LegacyPilot — System, Architecture & Process
+# Otto — System, Architecture & Process
 
 **Teach once. Operate forever.**
 
-This document describes the working system as built: how LegacyPilot drives
+This document describes the working system as built: how Otto drives
 OpenVSP **entirely through its GUI** (computer vision + clicks, never the
 software's API) to run real engineering analyses and trade studies on an
 aircraft model.
 
-> **Core principle: GUI-only, never the API.** The whole premise of LegacyPilot
+> **Core principle: GUI-only, never the API.** The whole premise of Otto
 > is operating specialized software that has *no usable integration*. OpenVSP
 > happens to also ship a Python API — we deliberately do **not** use it as the
 > execution path. Everything below reads and writes the live GUI. (The API is
@@ -18,7 +18,7 @@ aircraft model.
 
 ## 1. What it does today
 
-Starting from a cold machine, LegacyPilot can, purely by operating the OpenVSP
+Starting from a cold machine, Otto can, purely by operating the OpenVSP
 window:
 
 1. **Launch** OpenVSP with a model loaded (the Boeing 737-800 demo model).
@@ -53,7 +53,7 @@ orchestrator with no code change.
 
 ## 2. The two-tier philosophy
 
-LegacyPilot splits every workflow into two roles:
+Otto splits every workflow into two roles:
 
 | Tier | Role | Mechanism | Cost |
 |------|------|-----------|------|
@@ -344,7 +344,7 @@ computation itself is < 0.5 s.
 
 - **Speed vs the API.** GUI-only will never match the software's own API for
   speed (the API runs the same solver in-process in < 0.5 s). That is accepted:
-  the value of LegacyPilot is operating software *without* an API, not matching
+  the value of Otto is operating software *without* an API, not matching
   API speed.
 
 ---

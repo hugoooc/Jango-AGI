@@ -1,4 +1,4 @@
-# LegacyPilot — Pitch & Presentation
+# Otto — Pitch & Presentation
 
 **Teach once. Operate forever.**
 *A computer-use agent that operates the software engineers can't automate — governed for the industries that can't take risks.*
@@ -11,7 +11,7 @@
 
 ## 1. The one-liner
 
-> LegacyPilot is a computer-use agent that **learns to operate specialized desktop
+> Otto is a computer-use agent that **learns to operate specialized desktop
 > software by watching its GUI** — no API, no integration, no scripts — and then
 > runs real engineering studies on it. We prove it on **OpenVSP**, a NASA-origin
 > aircraft design tool, and we wrap every action in **NVIDIA NemoClaw-style
@@ -36,14 +36,14 @@ Traditional automation is brittle: hard-coded coordinates, fixed macros, per-app
 connectors that break on the next release. **Nobody has cracked "operate any desktop
 tool the way an engineer does."**
 
-That's exactly what H Company's computer-use models make possible — and what LegacyPilot
+That's exactly what H Company's computer-use models make possible — and what Otto
 turns into a product.
 
 ---
 
 ## 3. The solution
 
-LegacyPilot has two tiers, and the split is the whole idea:
+Otto has two tiers, and the split is the whole idea:
 
 **① Discovery — the agent *learns* the GUI (H Company Holo).**
 The agent looks at a screenshot and H Company's **Holo** computer-use model grounds every
@@ -57,7 +57,7 @@ result *values* still uses Holo vision (a changing number isn't at a fixed place
 
 On top of that we built the thing engineers actually want: **trade studies**.
 Ask a question in plain terms — *"what's the impact on center of gravity if we increase
-the wingspan by 12%?"* — and LegacyPilot drives OpenVSP through its GUI: opens the wing
+the wingspan by 12%?"* — and Otto drives OpenVSP through its GUI: opens the wing
 editor, reads the current span, computes +12%, sets it, runs Mass Properties, reads the
 result off the screen, and reports the answer. **All by operating the interface. No API.**
 
@@ -127,7 +127,7 @@ interpretation and what we built:
   hardening on OpenShell, network egress policy with operator-approval flow, routed
   inference, and audit logging.
 - **The real constraint we hit (and address head-on):** NemoClaw's core is kernel-level
-  isolation in an **OpenShell Linux container**. LegacyPilot's GUI driver must run on the
+  isolation in an **OpenShell Linux container**. Otto's GUI driver must run on the
   **macOS host** — it screenshots the display and moves the real mouse to operate
   OpenVSP.app. You *cannot* put the GUI loop inside an OpenShell sandbox: the sandbox is
   exactly what would cut off its access to the desktop.
@@ -199,7 +199,7 @@ the governance that actually matters — not a checkbox integration.
 
 ## 9. Short project description (for submission)
 
-> **LegacyPilot** is a computer-use agent that operates specialized desktop engineering
+> **Otto** is a computer-use agent that operates specialized desktop engineering
 > software — tools with no API — by learning their GUI with H Company's Holo model and
 > replaying the workflow reliably. It runs real engineering trade studies on OpenVSP (a
 > NASA-origin aircraft design tool): ask in plain language ("impact on center of gravity
@@ -253,6 +253,6 @@ inference.
   NemoClaw). Gradium voice is an available stretch (see below).
 
 **Stretch if time (Voice / Gradium side challenge):** add STT so an engineer *speaks* the
-trade study ("what happens to CG if the wing grows 12%?") and TTS so LegacyPilot *reads
+trade study ("what happens to CG if the wing grows 12%?") and TTS so Otto *reads
 back* the result. That makes the demo a hands-free, spoken engineering assistant — a
 second side prize on the same core.

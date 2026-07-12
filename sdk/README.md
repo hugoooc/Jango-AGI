@@ -1,4 +1,4 @@
-# LegacyPilot
+# Otto
 
 **Teach once. Operate forever.**
 
@@ -10,22 +10,22 @@ multiple workers, stream each desktop through noVNC, and dispatch independent
 pixel/mouse/keyboard workflows without using the OpenVSP API. See
 [CONTAINER_DEMO.md](CONTAINER_DEMO.md) for the build and test procedure.
 
-LegacyPilot is a desktop AI agent that learns how to operate specialized software without prebuilt integrations, scripts, or application-specific automation.
+Otto is a desktop AI agent that learns how to operate specialized software without prebuilt integrations, scripts, or application-specific automation.
 
-Instead of being programmed for a particular interface, LegacyPilot reads the software documentation, safely explores the UI using H Company's computer-use models, observes the results of its actions, and builds a persistent procedural memory. It can then compose what it has learned to complete new workflows and adapt existing work when requirements change.
+Instead of being programmed for a particular interface, Otto reads the software documentation, safely explores the UI using H Company's computer-use models, observes the results of its actions, and builds a persistent procedural memory. It can then compose what it has learned to complete new workflows and adapt existing work when requirements change.
 
 The goal is to help engineering teams move up to **10× faster with the same resources**—running more simulations, shortening iteration cycles, accelerating time to market, and ultimately delivering more projects.
 
 > [!NOTE]
-> LegacyPilot is currently an early-stage prototype. The MVP focuses on a controlled aircraft-design workflow in OpenVSP.
+> Otto is currently an early-stage prototype. The MVP focuses on a controlled aircraft-design workflow in OpenVSP.
 
-## Why LegacyPilot?
+## Why Otto?
 
 Critical workflows in aerospace, engineering, energy, healthcare, and industrial operations often depend on powerful desktop applications that have limited APIs, scarce integrations, and steep learning curves.
 
 Engineers spend a significant part of each project operating complex tools, repeating known procedures, configuring simulations, and translating design changes into software actions. This limits the number of iterations a team can run and the number of projects it can deliver.
 
-LegacyPilot turns that operational work into reusable knowledge. With the same engineering resources, teams can:
+Otto turns that operational work into reusable knowledge. With the same engineering resources, teams can:
 
 - Execute repetitive software workflows up to 10× faster
 - Run more simulations and explore more design alternatives
@@ -34,7 +34,7 @@ LegacyPilot turns that operational work into reusable knowledge. With the same e
 - Increase the number of projects completed in parallel
 - Keep engineers focused on judgment, design, and decision-making
 
-Traditional automation is brittle: it relies on hard-coded coordinates, fixed scripts, or application-specific connectors. LegacyPilot takes a different approach. It learns reusable procedures from documentation and verified interaction, then stores them as operational memory that compounds over time.
+Traditional automation is brittle: it relies on hard-coded coordinates, fixed scripts, or application-specific connectors. Otto takes a different approach. It learns reusable procedures from documentation and verified interaction, then stores them as operational memory that compounds over time.
 
 “Learning” means building persistent, inspectable procedural memory—not updating model weights in real time.
 
@@ -42,7 +42,7 @@ Traditional automation is brittle: it relies on hard-coded coordinates, fixed sc
 
 The first target is [OpenVSP](https://openvsp.org/), a free, NASA-originated parametric aircraft design tool available on Apple Silicon and Intel Macs.
 
-During the learning phase, LegacyPilot discovers how to:
+During the learning phase, Otto discovers how to:
 
 - Create and select aircraft components
 - Add fuselages, wings, and tails
@@ -61,14 +61,14 @@ Every successful interaction becomes a reusable, parameterized skill with:
 
 ## Demo Scenario
 
-1. LegacyPilot starts with OpenVSP and no application-specific procedural memory.
+1. Otto starts with OpenVSP and no application-specific procedural memory.
 2. It reads the documentation and safely explores the interface.
 3. A live skill graph grows as actions are discovered and verified.
 4. OpenVSP is reset to a blank project.
 5. The user requests a drone with specific dimensions and components.
-6. LegacyPilot combines its learned skills to build the 3D model.
+6. Otto combines its learned skills to build the 3D model.
 7. The user adds a constraint, such as a larger wingspan or a different wing position.
-8. LegacyPilot updates the existing model and validates the result.
+8. Otto updates the existing model and validates the result.
 
 ## Desktop Experience
 
@@ -121,7 +121,7 @@ flowchart LR
 
 ## Safety by Design
 
-LegacyPilot treats computer use as a supervised, stateful process. The MVP is designed around a few core principles:
+Otto treats computer use as a supervised, stateful process. The MVP is designed around a few core principles:
 
 - Prefer reversible exploration and known-safe actions
 - Verify outcomes instead of assuming an action succeeded
@@ -155,7 +155,7 @@ The MVP does not attempt to map all of OpenVSP. It learns approximately 10–15 
 
 ## Success Criteria
 
-The MVP is successful when LegacyPilot can:
+The MVP is successful when Otto can:
 
 1. Start with no OpenVSP-specific procedural memory.
 2. Discover and persist the skills required for the demo workflow.
@@ -166,7 +166,7 @@ The MVP is successful when LegacyPilot can:
 
 ## Project Status
 
-LegacyPilot is under active development. The application architecture, implementation stack, development setup, and contribution guidelines will be documented as the repository takes shape.
+Otto is under active development. The application architecture, implementation stack, development setup, and contribution guidelines will be documented as the repository takes shape.
 
 ## Long-Term Vision
 
@@ -176,7 +176,7 @@ The goal is simple: transform successful interaction into durable operational kn
 
 ---
 
-**LegacyPilot — Teach once. Operate forever.**
+**Otto — Teach once. Operate forever.**
 
 ## Local voice interface
 

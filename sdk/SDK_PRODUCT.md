@@ -1,6 +1,6 @@
 # SDK Product — parallel simulation fleet on `hai-agents`
 
-The `sdk` branch rebuilds LegacyPilot on H Company's official **`hai-agents` SDK**,
+The `sdk` branch rebuilds Otto on H Company's official **`hai-agents` SDK**,
 adds a **fleet controller** that runs simulation variants **in parallel**, and keeps
 the **NemoClaw-pattern governance**. This is the hackathon product.
 

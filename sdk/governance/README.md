@@ -1,16 +1,16 @@
 # NemoClaw-pattern governance layer
 
-This package wraps LegacyPilot's GUI-driving orchestrator with the governance
+This package wraps Otto's GUI-driving orchestrator with the governance
 model of **[NVIDIA NemoClaw](https://github.com/NVIDIA/NemoClaw)** — policy
 enforcement, operator approval, egress control, and audit logging — so a run
 can move "from prototype to safer, governed deployment" (NemoClaw's stated goal)
 in environments where privacy, monitoring, and policy controls matter
-(aerospace / defense — LegacyPilot's target market).
+(aerospace / defense — Otto's target market).
 
 ## Why a *pattern*, not the product itself
 
 NemoClaw's core mechanism is **kernel-level container isolation on NVIDIA
-OpenShell** (Linux/GPU). LegacyPilot's GUI driver must run on the **macOS host**:
+OpenShell** (Linux/GPU). Otto's GUI driver must run on the **macOS host**:
 it screenshots the display and moves the real mouse/keyboard to operate
 OpenVSP.app. A process sandboxed inside an OpenShell Linux container cannot see
 or drive a macOS desktop GUI — the sandbox is precisely what would sever the
