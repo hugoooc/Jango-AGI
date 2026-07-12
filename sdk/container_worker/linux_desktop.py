@@ -73,9 +73,13 @@ def _api_key() -> str:
     return key_value
 
 
-def _holo(payload: dict, attempts: int = 4) -> dict:
-    """Call Holo with bounded retry for parallel-worker rate limiting."""
+def _holo(payload: dict, attempts: int = 7) -> dict:
+    """Call Holo with generous retry+jitter for parallel-worker rate limiting.
+    N workers each fire several vision calls, so the shared key gets bursty 429s;
+    more attempts and per-worker jitter spread the load so all workers succeed."""
     last_error: Exception | None = None
+    # per-process jitter seed so concurrent workers don't retry in lockstep
+    jitter_base = (hash(os.environ.get("WORKER_ID", "worker")) % 1000) / 1000.0
     for attempt in range(attempts):
         request = urllib.request.Request(
             f"{HOLO_BASE}/chat/completions",
@@ -94,7 +98,8 @@ def _holo(payload: dict, attempts: int = 4) -> dict:
             last_error = exc
             if attempt == attempts - 1:
                 break
-        time.sleep(1.5 * (2 ** attempt))
+        # exponential backoff capped at 20s, plus per-worker jitter
+        time.sleep(min(1.5 * (2 ** attempt), 20.0) + jitter_base * 2.0)
     raise RuntimeError(f"Holo request failed: {last_error}")
 
 
@@ -157,9 +162,42 @@ def assert_visual(assertion: str) -> dict:
     return result
 
 
+def read_values(prompt: str, keys: list[str]) -> dict:
+    """Read named numeric values off the current screen (e.g. a results panel).
+    Returns {key: float|None}. GUI-only: reads pixels, never OpenVSP's API."""
+    image_url = "data:image/png;base64," + base64.b64encode(screenshot()).decode()
+    ask = f"{prompt} Return ONLY JSON with these keys (numbers shown on screen): {keys}."
+    payload = {
+        "model": HOLO_MODEL,
+        "messages": [{"role": "user", "content": [
+            {"type": "text", "text": ask},
+            {"type": "image_url", "image_url": {"url": image_url}},
+        ]}],
+        "temperature": 0.0,
+        "max_tokens": 900,
+    }
+    message = _holo(payload)["choices"][0]["message"]
+    blob = (message.get("content") or "") + "\n" + (message.get("reasoning") or "")
+    match = re.search(r"\{.*\}", blob, re.S)
+    if not match:
+        raise RuntimeError(f"Holo did not return values: {blob!r}")
+    raw = json.loads(match.group(0))
+    out = {}
+    for k in keys:
+        try:
+            out[k] = float(raw.get(k))
+        except (TypeError, ValueError):
+            out[k] = None
+    return out
+
+
 def execute(action: dict) -> dict:
     """Execute one JSON action and return observable metadata."""
     kind = action.get("type")
+    if kind == "vision_read":
+        values = read_values(str(action.get("prompt", "Read the results panel.")),
+                             list(action.get("keys", [])))
+        return {"type": kind, "values": values}
     if kind == "focus":
         focus_openvsp()
         return {"type": kind}

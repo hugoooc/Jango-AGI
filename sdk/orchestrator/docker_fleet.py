@@ -39,6 +39,23 @@ class Worker:
         return {**asdict(self), "api_url": self.api_url, "viewer_url": self.viewer_url}
 
 
+def _resolve_api_key() -> str | None:
+    """Find the Holo key from the environment or a nearby .env, so workers get
+    it even when the orchestrator was launched without exporting it."""
+    for var in ("HCOMPANY_API_KEY", "HAI_API_KEY"):
+        if os.environ.get(var):
+            return os.environ[var]
+    here = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(4):
+        env_path = os.path.join(here, ".env")
+        if os.path.exists(env_path):
+            for line in open(env_path):
+                if line.startswith(("HCOMPANY_API_KEY=", "HAI_API_KEY=")):
+                    return line.split("=", 1)[1].strip()
+        here = os.path.dirname(here)
+    return None
+
+
 def _docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["docker", *args], check=check, capture_output=True, text=True, env=os.environ.copy()
@@ -92,10 +109,9 @@ def start_worker(index: int) -> Worker:
         "-p", f"127.0.0.1:{current.vnc_port}:6080",
         "-e", f"WORKER_ID=worker-{index}",
     ]
-    if os.environ.get("HCOMPANY_API_KEY"):
-        command.extend(["-e", "HCOMPANY_API_KEY"])
-    elif os.environ.get("HAI_API_KEY"):
-        command.extend(["-e", "HAI_API_KEY"])
+    api_key = _resolve_api_key()
+    if api_key:
+        command.extend(["-e", f"HCOMPANY_API_KEY={api_key}"])
     command.append(IMAGE)
     _docker(*command)
     return worker(index)
@@ -162,3 +178,48 @@ def smoke_actions(index: int) -> list[dict]:
     """Deterministic no-key test: open a different top-level menu per worker."""
     menu_x = [31, 75, 141, 199, 258, 327, 372][(index - 1) % 7]
     return [{"type": "click", "x": menu_x, "y": 43}, {"type": "sleep", "seconds": 1}]
+
+
+def wing_span_mass_actions(value: float) -> list[dict]:
+    """Set the wing span, run Mass Properties, and READ the resulting mass/CG —
+    all vision-grounded, GUI-only. Returns a `vision_read` value in its result."""
+    return [
+        {"type": "vision_click", "target": "the Wing row in the Geom Browser tree", "double": True},
+        {"type": "sleep", "seconds": 1.0},
+        {"type": "vision_click", "target": "the Plan tab in the Wing geometry editor"},
+        {"type": "sleep", "seconds": 0.6},
+        {"type": "vision_click", "target": "the Span numeric input in the Total Planform section"},
+        {"type": "key", "key": "ctrl+a"},
+        {"type": "type", "text": str(value)},
+        {"type": "key", "key": "Return"},
+        {"type": "sleep", "seconds": 1.0},
+        # run Mass Properties: Analysis menu -> Mass Prop... -> Compute
+        {"type": "vision_click", "target": "the Analysis menu in the top menu bar"},
+        {"type": "sleep", "seconds": 0.6},
+        {"type": "vision_click", "target": "the Mass Prop... item in the open Analysis menu"},
+        {"type": "sleep", "seconds": 0.8},
+        {"type": "vision_click", "target": "the Compute button in the Mass Properties dialog"},
+        {"type": "sleep", "seconds": 1.2},
+        {"type": "vision_read",
+         "prompt": "Read the Mass Properties Results panel shown on screen.",
+         "keys": ["Total_Mass", "X_Cg"]},
+    ]
+
+
+def wait_job(item: Worker, job_id: str, timeout: float = 180.0) -> dict:
+    """Poll a worker's job until it settles; return the final job dict."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        job = request(item, "GET", f"/jobs/{job_id}", timeout=15)
+        if isinstance(job, dict) and job.get("state") in ("done", "error"):
+            return job
+        time.sleep(1.5)
+    return {"state": "timeout", "job_id": job_id}
+
+
+def mass_from_job(job: dict):
+    """Extract the mass/CG the worker read via its vision_read action."""
+    for act in job.get("actions", []) or []:
+        if act.get("type") == "vision_read":
+            return act.get("values", {})
+    return {}

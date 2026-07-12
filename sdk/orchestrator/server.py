@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -52,6 +53,39 @@ def _dispatch(items: list[fleet.Worker], values: list[float] | None, mode: str) 
     for thread in threads:
         thread.join()
     return [result for result in results if result is not None]
+
+
+def _parallel_mass_sweep(values: list[float]) -> dict:
+    """MASTER AGENT: fan a wingspan sweep across all workers, run set+measure in
+    parallel, wait for each, and collect the mass curve. Wall-clock ~= ONE run,
+    not N runs — that's the point of the fleet."""
+    started = time.time()
+    workers = fleet.ensure_workers(len(values))
+    points: list[dict | None] = [None] * len(values)
+
+    def run_point(pos: int, item: fleet.Worker) -> None:
+        try:
+            actions = fleet.wing_span_mass_actions(values[pos])
+            ack = fleet.request(item, "POST", "/actions", {"actions": actions})
+            job = fleet.wait_job(item, ack["job_id"])
+            vals = fleet.mass_from_job(job) or {}
+            points[pos] = {"x": values[pos], "y": vals.get("Total_Mass"),
+                           "cg_x": vals.get("X_Cg"), "worker": item.index,
+                           "state": job.get("state")}
+        except Exception as exc:
+            points[pos] = {"x": values[pos], "y": None, "worker": item.index,
+                           "error": f"{type(exc).__name__}: {exc}"}
+
+    threads = [threading.Thread(target=run_point, args=(i, w)) for i, w in enumerate(workers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    pts = [p for p in points if p is not None]
+    return {"study": "parallel_mass_sweep", "input": "wing_span", "output": "mass",
+            "points": pts, "workers": len(workers),
+            "seconds": round(time.time() - started, 1)}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -114,6 +148,13 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("wing_span mode requires values")
                 items = fleet.ensure_workers(count)
                 self._json(202, {"mode": mode, "runs": _dispatch(items, values or None, mode)})
+                return
+            if path == "/api/sweep":
+                # MASTER AGENT: parallel mass sweep across the fleet -> a curve.
+                values = [float(v) for v in payload.get("values", [])]
+                if not values:
+                    raise ValueError("sweep requires a non-empty 'values' list")
+                self._json(200, _parallel_mass_sweep(values))
                 return
             self._json(404, {"error": "not found"})
         except (ValueError, RuntimeError, json.JSONDecodeError) as exc:
