@@ -12,8 +12,21 @@ It only runs the analyses actually needed (an output names its analysis; the
 dispatcher runs each required analysis once, not once per output). It refuses —
 loudly, up front — outputs tagged "slow" (VSPAERO) when the caller asked to stay
 fast, so the jury is never surprised by a minutes-long solve.
+
+Reliability model (verified the hard way): each measurement runs in its OWN
+fresh OpenVSP session, with parameter edits applied BEFORE any analysis dialog
+is opened. Editing a parameter then measuring in a pristine session updates the
+geometry correctly; reusing a session (stale Mass Prop dialog, accumulated FLTK
+state) freezes the result. So we relaunch per measurement — slower, but right.
 """
+import os
+import sys
 import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bot"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "cu"))
+import lifecycle as L      # noqa: E402
+from replay import replay  # noqa: E402
 
 from . import registry as R
 from . import executor as E
@@ -52,6 +65,13 @@ def _measure(analyses):
     """Run each needed analysis once; merge their result dicts."""
     merged = {}
     for a in analyses:
+        if a == "massprop":
+            # the proven trajectory: menu open -> Compute -> read (works in a
+            # fresh session where edits were applied first)
+            log = replay("massprop", reset=True, slices="20")
+            hits = [e for e in log if e.get("op") == "read_results"]
+            merged.update(hits[0]["results"] if hits else {})
+            continue
         fn = E.ANALYSES.get(a)
         if fn is None:
             merged[f"_{a}_error"] = "analysis not wired for GUI (likely slow/solver)"
@@ -65,8 +85,33 @@ def _pick(results, output_key):
     return {f: results.get(f) for f in R.OUTPUTS[output_key]["fields"]}
 
 
-def run(req: Request) -> dict:
-    """Execute a request and return a structured before/after/delta report."""
+def _fresh_measure(model, changes_to_apply, analyses):
+    """Relaunch OpenVSP fresh, apply changes to the geometry FIRST, then measure.
+
+    Order is load-bearing (verified): changing a parameter and measuring in a
+    PRISTINE session updates the geometry correctly; measuring first (opening the
+    Mass Prop dialog) and then editing leaves the result frozen. So every
+    measurement gets its own clean session with edits applied before any analysis
+    dialog is opened. Returns (merged_results, [(change, before, target)])."""
+    L.quit(); time.sleep(1.0)
+    L.launch(model)
+    E.sweep_dialogs()
+
+    applied = []
+    for ch in changes_to_apply:
+        before = E.read_input(ch.input_key)   # current (pristine) value
+        target = ch.target(before)
+        E.set_input(ch.input_key, target)     # edit BEFORE any analysis dialog
+        applied.append((ch, before, target))
+
+    return _measure(analyses), applied
+
+
+def run(req: Request, model="boeing777200.vsp3") -> dict:
+    """Execute a request via relaunch-per-measurement (reliable, ~1 launch each).
+
+    Baseline and the modified design each run in their own fresh OpenVSP session,
+    so results are always correct (no stale-dialog / state-corruption issues)."""
     t0 = time.time()
 
     slow = [o for o in req.outputs if R.OUTPUTS[o]["speed"] == "slow"]
@@ -77,24 +122,11 @@ def run(req: Request) -> dict:
 
     analyses = _needed_analyses(req.outputs)
 
-    # 1. baseline measurement
-    base = _measure(analyses)
+    # baseline: fresh session, no changes
+    base, _ = _fresh_measure(model, [], analyses)
+    # modified: fresh session, changes applied first
+    after, applied = _fresh_measure(model, req.changes, analyses)
 
-    # 2. apply changes (record before/after of each input for restore)
-    applied = []
-    for ch in req.changes:
-        before = E.read_input(ch.input_key) if ch.mode != "set" else None
-        # for 'set' we still want the original to restore -> read it
-        if before is None:
-            before = E.read_input(ch.input_key)
-        target = ch.target(before)
-        E.set_input(ch.input_key, target)
-        applied.append((ch, before, target))
-
-    # 3. after measurement
-    after = _measure(analyses)
-
-    # 4. build the report
     report = {"changes": [], "outputs": {}, "seconds": None}
     for ch, before, target in applied:
         report["changes"].append({
@@ -106,13 +138,6 @@ def run(req: Request) -> dict:
         deltas = {k: (None if b.get(k) is None or a.get(k) is None
                       else round(a[k] - b[k], 4)) for k in R.OUTPUTS[o]["fields"]}
         report["outputs"][o] = {"before": b, "after": a, "delta": deltas}
-
-    # 5. restore inputs to baseline
-    for ch, before, _ in applied:
-        try:
-            E.set_input(ch.input_key, before)
-        except Exception:
-            pass
 
     report["seconds"] = round(time.time() - t0, 1)
     return report
