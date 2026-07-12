@@ -25,3 +25,4 @@ models/lp_runs/
 governance/audit.log.jsonl
 models/*_MassProps.txt
 engine/baseline_cache.json
+orchestrator/baked_coords.json

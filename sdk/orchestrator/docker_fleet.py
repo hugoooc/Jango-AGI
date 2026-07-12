@@ -202,7 +202,7 @@ def wing_span_mass_actions(value: float) -> list[dict]:
         {"type": "sleep", "seconds": 1.2},
         {"type": "vision_read",
          "prompt": "Read the Mass Properties Results panel shown on screen.",
-         "keys": ["Total_Mass", "X_Cg"]},
+         "keys": ["Total_Mass", "X_Cg", "Ixx", "Izz"]},
     ]
 
 
@@ -309,7 +309,7 @@ def wing_span_mass_actions_baked(value: float, coords: dict) -> list[dict]:
         {"type": "sleep", "seconds": 1.0},
         {"type": "vision_read",
          "prompt": "Read the Mass Properties Results panel shown on screen.",
-         "keys": ["Total_Mass", "X_Cg"]},
+         "keys": ["Total_Mass", "X_Cg", "Ixx", "Izz"]},
     ]
 
 

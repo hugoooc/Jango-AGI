@@ -132,11 +132,17 @@ def _dispatch(items: list[fleet.Worker], values: list[float] | None, mode: str) 
     return [result for result in results if result is not None]
 
 
-def _parallel_mass_sweep(values: list[float]) -> dict:
+def _parallel_mass_sweep(values: list[float], fresh: bool = True) -> dict:
     """MASTER AGENT: fan a wingspan sweep across all workers, run set+measure in
     parallel, wait for each, and collect the mass curve. Wall-clock ~= ONE run,
-    not N runs — that's the point of the fleet."""
+    not N runs — that's the point of the fleet.
+
+    fresh=True recreates the containers so every point starts from the PRISTINE
+    737 (a reused worker keeps its previous geometry, which corrupts the curve).
+    """
     started = time.time()
+    if fresh:
+        fleet.stop_all()
     workers = fleet.ensure_workers(len(values))
     points: list[dict | None] = [None] * len(values)
 
@@ -155,7 +161,8 @@ def _parallel_mass_sweep(values: list[float]) -> dict:
             job = fleet.wait_job(item, ack["job_id"])
             vals = fleet.mass_from_job(job) or {}
             points[pos] = {"x": values[pos], "y": vals.get("Total_Mass"),
-                           "cg_x": vals.get("X_Cg"), "worker": item.index,
+                           "cg_x": vals.get("X_Cg"), "ixx": vals.get("Ixx"),
+                           "izz": vals.get("Izz"), "worker": item.index,
                            "state": job.get("state")}
         except Exception as exc:
             points[pos] = {"x": values[pos], "y": None, "worker": item.index,
