@@ -5,6 +5,8 @@ derisk/runs/
 *.pyc
 .DS_Store
 .env
+__pycache__/
+*.pyc
 .vsptime
 
 # runtime artifacts (screenshots, solver output) — not source

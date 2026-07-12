@@ -2,6 +2,14 @@
 
 **Teach once. Operate forever.**
 
+## Containerized GUI fleet
+
+The SDK now includes an experimental Docker worker that runs the real OpenVSP
+Linux GUI on an isolated virtual desktop. A localhost dashboard can create
+multiple workers, stream each desktop through noVNC, and dispatch independent
+pixel/mouse/keyboard workflows without using the OpenVSP API. See
+[CONTAINER_DEMO.md](CONTAINER_DEMO.md) for the build and test procedure.
+
 LegacyPilot is a desktop AI agent that learns how to operate specialized software without prebuilt integrations, scripts, or application-specific automation.
 
 Instead of being programmed for a particular interface, LegacyPilot reads the software documentation, safely explores the UI using H Company's computer-use models, observes the results of its actions, and builds a persistent procedural memory. It can then compose what it has learned to complete new workflows and adapt existing work when requirements change.

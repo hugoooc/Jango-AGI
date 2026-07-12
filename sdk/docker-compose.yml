@@ -1,0 +1,14 @@
+services:
+  worker:
+    image: legacypilot-openvsp-worker:dev
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    platform: linux/amd64
+    environment:
+      HCOMPANY_API_KEY: ${HCOMPANY_API_KEY:-}
+      HAI_API_KEY: ${HAI_API_KEY:-}
+    expose:
+      - "8080"
+      - "6080"
+

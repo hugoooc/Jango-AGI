@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LegacyPilot · OpenVSP Fleet</title>
+<style>
+:root{color-scheme:dark;--bg:#091019;--panel:#111c28;--line:#223348;--ink:#edf6ff;--muted:#8da1b5;--accent:#67e8c2;--danger:#ff8d7d}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -20%,#16324a,var(--bg) 50%);color:var(--ink);font-family:Inter,system-ui,sans-serif}.wrap{max-width:1180px;margin:auto;padding:38px 24px 80px}h1{margin:0;font-size:25px}.tag{color:var(--muted);margin:5px 0 28px}.controls{display:flex;gap:12px;flex-wrap:wrap;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px}.controls label{display:flex;align-items:center;gap:8px;color:var(--muted)}input{background:#09131e;border:1px solid var(--line);color:var(--ink);padding:10px;border-radius:8px}button,a.button{border:0;border-radius:8px;padding:10px 14px;background:var(--accent);color:#032018;font-weight:700;cursor:pointer;text-decoration:none}button.secondary,a.secondary{background:#26384c;color:var(--ink)}button.danger{background:var(--danger);color:#2d0803}.status{min-height:24px;margin:16px 3px;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}.worker{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}.head{padding:12px 14px;display:flex;align-items:center;justify-content:space-between}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:7px}.screen{display:block;width:100%;aspect-ratio:16/10;object-fit:contain;background:#000;border-top:1px solid var(--line)}.links{display:flex;gap:8px}.links a{font-size:12px;padding:7px 9px}.empty{color:var(--muted);padding:60px 0;text-align:center}code{color:var(--accent)}
+</style>
+</head>
+<body><main class="wrap">
+<h1>LegacyPilot · OpenVSP Fleet</h1>
+<p class="tag">Independent OpenVSP GUIs · pixels in, mouse and keyboard out · no application API</p>
+<section class="controls">
+  <label>Workers <input id="count" type="number" min="1" max="12" value="2" size="3"></label>
+  <button onclick="start()">Start workers</button>
+  <button class="secondary" onclick="smoke()">Visual smoke test</button>
+  <label>Wing spans <input id="values" value="10, 12" size="18"></label>
+  <button class="secondary" onclick="spans()">Run vision task</button>
+  <button class="danger" onclick="stopAll()">Stop all</button>
+</section>
+<div class="status" id="status">Ready.</div><section class="grid" id="grid"></section>
+</main>
+<script>
+const $=s=>document.querySelector(s);let refreshTimer;
+async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):null});const data=await r.json();if(!r.ok)throw Error(data.error||r.statusText);return data}
+function busy(text){$('#status').textContent=text}
+async function start(){try{busy('Starting OpenVSP containers… first startup can take a minute.');await api('/api/workers/start',{count:+$('#count').value});await load();busy('Workers are live. Open a desktop to watch or interact manually.')}catch(e){busy(e.message)}}
+async function smoke(){try{busy('Sending independent GUI actions…');const out=await api('/api/runs',{mode:'smoke',count:+$('#count').value});watch(out.runs);busy('Actions dispatched. Each worker opens a different OpenVSP menu.')}catch(e){busy(e.message)}}
+async function spans(){try{const values=$('#values').value.split(',').map(x=>+x.trim()).filter(Number.isFinite);busy('Holo is grounding controls and applying wing spans…');const out=await api('/api/runs',{mode:'wing_span',values});watch(out.runs);busy('Vision tasks dispatched. Watch each desktop live.')}catch(e){busy(e.message)}}
+async function stopAll(){try{await api('/api/workers/stop',{});await load();busy('All worker containers stopped.')}catch(e){busy(e.message)}}
+function watch(runs){for(const run of runs){if(run.job_id)poll(run.worker.index,run.job_id)}}
+async function poll(index,id){try{const j=await api(`/api/workers/${index}/jobs/${id}`);if(j.state==='running')return setTimeout(()=>poll(index,id),700);await load();busy(j.state==='done'?`Worker ${index} completed in ${j.seconds}s.`:`Worker ${index}: ${j.error}`)}catch(e){busy(e.message)}}
+async function load(){try{const workers=await api('/api/workers');const g=$('#grid');if(!workers.length){g.innerHTML='<div class="empty">No workers running.</div>';return}g.innerHTML=workers.map(w=>`<article class="worker"><div class="head"><div><span class="dot"></span>${w.name}</div><div class="links"><a class="button secondary" target="_blank" href="${w.viewer_url}">Open live desktop</a></div></div><img class="screen" src="/api/workers/${w.index}/screenshot?t=${Date.now()}"></article>`).join('')}catch(e){busy(e.message)}}
+load();refreshTimer=setInterval(load,5000);
+</script></body></html>
