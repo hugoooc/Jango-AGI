@@ -76,10 +76,11 @@ class Change:
 
 
 class Request:
-    def __init__(self, changes, outputs, fast_only=True):
+    def __init__(self, changes, outputs, fast_only=True, close_when_done=True):
         self.changes = changes          # list[Change]
         self.outputs = outputs          # list[output_key]
         self.fast_only = fast_only
+        self.close_when_done = close_when_done   # quit OpenVSP after answering
 
 
 def _needed_analyses(output_keys):
@@ -125,9 +126,20 @@ def _fresh_measure(model, changes_to_apply, analyses):
 
     applied = []
     for ch in changes_to_apply:
-        before = E.read_input(ch.input_key)   # current (pristine) value
-        target = ch.target(before)
-        E.set_input(ch.input_key, target)     # edit BEFORE any analysis dialog
+        if ch.mode == "set":
+            # absolute set: no need to read the current value first (saves a
+            # ~5-7s Holo read). Open once, set (trust the commit, no verify).
+            E.open_geom(R.INPUTS[ch.input_key]["geom"])
+            E.goto_tab(R.INPUTS[ch.input_key]["tab"])
+            target = ch.target(None)
+            E.set_input(ch.input_key, target, verify=False, already_open=True)
+            before = None
+        else:
+            # scale/delta need the current value; read_input leaves the editor
+            # open on the right tab, so set_input reuses it.
+            before = E.read_input(ch.input_key)
+            target = ch.target(before)
+            E.set_input(ch.input_key, target, verify=False, already_open=True)
         applied.append((ch, before, target))
 
     return _measure(analyses), applied
@@ -159,6 +171,10 @@ def run(req: Request, model="boeing777200.vsp3") -> dict:
 
     # modified: fresh session, changes applied first
     after, applied = _fresh_measure(model, req.changes, analyses)
+
+    # leave nothing running — the demo/UI expects OpenVSP closed at the end
+    if req.close_when_done:
+        L.quit()
 
     report = {"changes": [], "outputs": {}, "baseline_cached": cached, "seconds": None}
     for ch, before, target in applied:

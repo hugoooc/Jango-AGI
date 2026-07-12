@@ -73,22 +73,32 @@ def goto_tab(tab):
     d.click(x, y); time.sleep(0.4)
 
 
-def set_input(input_key, value):
+def set_input(input_key, value, verify=False, already_open=False):
     """Set one input variable to an absolute value through the GUI. Opens the
-    right geom + tab, sets the field, and VERIFIES the value stuck (retry once).
-    Returns the read-back value."""
+    right geom + tab, sets the field.
+
+    verify=False (default): trust the FLTK-safe commit — in a FRESH session this
+    is reliable, and it skips a ~5-7s Holo read-back. verify=True adds the read +
+    one retry (use for shaky/first-time controls).
+    already_open=True: the editor is already on the right geom+tab (the caller
+    just did read_input), so skip the sweep/open/tab churn."""
     spec = R.INPUTS[input_key]
-    sweep_dialogs()
-    open_geom(spec["geom"])
-    goto_tab(spec["tab"])
+    if not already_open:
+        sweep_dialogs()
+        open_geom(spec["geom"])
+        goto_tab(spec["tab"])
+    x, y = _field_xy(spec)
+    d.triple_click(x, y); d.type_text(str(value)); d.commit_return()
+    time.sleep(0.3)
+    if not verify:
+        return float(value)
     for attempt in range(2):
-        x, y = _field_xy(spec)
-        d.triple_click(x, y); d.type_text(str(value)); d.commit_return()
-        time.sleep(0.3)
         back = _read_field(spec)
         if back is not None and abs(back - float(value)) < max(1e-3, abs(float(value)) * 1e-3):
             return back
-        goto_tab(spec["tab"])           # re-assert tab in case the click missed
+        goto_tab(spec["tab"])
+        x, y = _field_xy(spec)
+        d.triple_click(x, y); d.type_text(str(value)); d.commit_return(); time.sleep(0.3)
     raise RuntimeError(f"set {input_key}={value} did not stick (read back {back})")
 
 
