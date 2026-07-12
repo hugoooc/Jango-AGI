@@ -505,7 +505,7 @@ For each eligible candidate:
 
 ### Status
 
-`Not started`
+`Implemented — manually validated`
 
 ## Milestone 8 — Graph Viewer and Validation
 
@@ -684,9 +684,9 @@ These should be answered through experiments instead of assumed upfront:
 | 4 | Node identity and deduplication | Implemented — awaiting full manual matrix |
 | 5 | First replayable graph edge | Implemented — manually validated |
 | 6 | Whitelisted one-hop discovery | Implemented — manually validated |
-| 7 | Bounded autonomous exploration | Not started |
+| 7 | Bounded autonomous exploration | Implemented — manually validated |
 | 8 | Graph viewer and validation | Not started |
 
 ## Immediate Next Step
 
-Review the completed Milestone 6 discovery traces and graph export. Confirm the blank model remains unchanged, then define the bounded, resumable exploration limits required for Milestone 7.
+Review the completed Milestone 7 state, traces, and graph bounds, then build the Milestone 8 graph viewer and validation metrics.

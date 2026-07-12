@@ -24,5 +24,6 @@ DEFAULT_GRAPH_ROOT = Path("artifacts/graph")
 DEFAULT_GRAPH_RUN_ROOT = Path("artifacts/graph-runs")
 DEFAULT_REPLAY_ROOT = Path("artifacts/replays")
 DEFAULT_DISCOVERY_ROOT = Path("artifacts/discovery-runs")
+DEFAULT_EXPLORATION_ROOT = Path("artifacts/explorations")
 DEFAULT_AX_MAX_DEPTH = 12
 DEFAULT_AX_MAX_ELEMENTS = 5_000

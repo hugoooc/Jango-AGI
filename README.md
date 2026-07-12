@@ -2,7 +2,7 @@
 
 An incremental Python prototype for observing and mapping the OpenVSP user interface on macOS.
 
-The project implements Milestones 1–6 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, replayable graph edges, and bounded whitelisted one-hop discovery. It does not modify or save an OpenVSP model.
+The project implements Milestones 1–7 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, graph edges, whitelisted discovery, and bounded resumable exploration. It does not modify or save an OpenVSP model.
 
 ## Development commands
 
@@ -15,6 +15,7 @@ uv run python -m app_mapper interpret
 uv run python -m app_mapper capture-node
 uv run python -m app_mapper graph show
 uv run python -m app_mapper discover-one-hop
+uv run python -m app_mapper explore --max-depth 1 --max-nodes 10 --max-actions 18
 uv run pytest
 ```
 
@@ -147,3 +148,45 @@ Actions executed: 6
 Inspect each successful candidate directory under the printed run path. It must contain `before/`, `destination/`, `returned/`, and `trace.json`; `return_verified` must be true in `discovery.json`. Confirm OpenVSP still shows `Unnamed.vsp3` and no geometry was added or modified.
 
 Finally run `uv run python -m app_mapper graph show`. If the Milestone 5 About graph was already recorded, a complete Milestone 6 run normally expands it from 2 nodes/2 edges to 5 nodes/8 edges: three menu nodes and an open/cancel edge pair for each. Failed or rejected candidates must not add graph edges.
+
+## Milestone 7 bounded resumable exploration
+
+The autonomous queue contains eight exact top-level menus plus About. It never selects a command inside a menu. Destinations have no deeper executable candidates, so the current safe policy naturally stops at depth one even when a larger depth bound is configured.
+
+First test pause and resume with deliberately small bounds:
+
+```bash
+uv run python -m app_mapper explore \
+  --max-depth 1 \
+  --max-nodes 4 \
+  --max-actions 4 \
+  --max-seconds 60 \
+  --pause-after-actions 2
+```
+
+Expected first result: `paused`, one completed task, two actions, and a printed resume command. Run that exact command. The resumed run should preserve the first task and stop predictably at `max_actions reached` after two total tasks and four actions.
+
+Then run the full safe bound:
+
+```bash
+uv run python -m app_mapper explore \
+  --max-depth 1 \
+  --max-nodes 10 \
+  --max-actions 18 \
+  --max-seconds 180 \
+  --max-retries 1
+```
+
+Expected completion:
+
+```text
+Status: completed
+Stop reason: queue exhausted
+Progress: tasks=9/9, nodes=10/10, actions=18/18
+```
+
+Inspect the printed `state.json`. Every task should be `succeeded`, `return_verified` should be true, attempts should be 1, and all ten node IDs should be unique. `graph show` should report 10 nodes and 18 edges. Confirm OpenVSP remains `Unnamed.vsp3` with no geometry changes.
+
+As a replay sample, copy the workspace-to-File edge ID from `graph show` and run `uv run python -m app_mapper replay <edge-id>`. It should verify the File-menu destination node. macOS may automatically cancel a menu when that replay process exits, which is a safe return to the workspace.
+
+You may press Ctrl+C during a run. The explorer attempts the allowlisted reverse action, persists `paused` state, and prints a resumable run path. Process and focus changes stop the run safely. `--allow-relaunch` is deliberately opt-in and should only be used with the required blank unsaved model because it may terminate and reopen OpenVSP.

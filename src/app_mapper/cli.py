@@ -15,6 +15,7 @@ from app_mapper.config import (
     DEFAULT_DISCOVERY_ROOT,
     DEFAULT_GRAPH_ROOT,
     DEFAULT_GRAPH_RUN_ROOT,
+    DEFAULT_EXPLORATION_ROOT,
     DEFAULT_INTERPRETATION_ARTIFACT_ROOT,
     DEFAULT_NODE_OBSERVATION_ROOT,
     DEFAULT_NODE_REGISTRY_ROOT,
@@ -22,6 +23,7 @@ from app_mapper.config import (
     DEFAULT_TRANSITION_ARTIFACT_ROOT,
     OPENVSP,
 )
+from app_mapper.exploration import create_exploration, load_exploration, run_exploration
 from app_mapper.discovery import discover_one_hop, latest_interpretation
 from app_mapper.graph import (
     ReplayRefused,
@@ -47,6 +49,7 @@ from app_mapper.macos.applications import (
 )
 from app_mapper.macos.permissions import permission_status
 from app_mapper.macos.screenshots import ScreenshotError, capture_window
+from app_mapper.models import ExplorationBounds
 from app_mapper.transition import capture_phase, exercise_about
 
 
@@ -557,6 +560,94 @@ def run_discovery(
     return 0 if discovery.success else 3
 
 
+def run_bounded_exploration(
+    resume: Path | None,
+    exploration_root: Path,
+    graph_root: Path,
+    registry_root: Path,
+    max_depth: int,
+    max_nodes: int,
+    max_actions: int,
+    max_seconds: float,
+    max_retries: int,
+    allow_relaunch: bool,
+    pause_after_actions: int | None,
+    timeout: float,
+    ax_max_depth: int,
+    max_elements: int,
+) -> int:
+    diagnostics = collect_diagnostics()
+    errors: list[str] = []
+    if not diagnostics["target"]["installed"]:
+        errors.append("OpenVSP is not installed.")
+    if not diagnostics["permissions"]["screen_recording"]["granted"]:
+        errors.append("Screen Recording permission is required.")
+    if not diagnostics["permissions"]["accessibility"]["granted"]:
+        errors.append("Accessibility permission is required.")
+
+    if resume is not None:
+        try:
+            state = load_exploration(resume)
+        except Exception as exc:
+            print(f"Cannot resume exploration: {type(exc).__name__}: {exc}")
+            return 3
+        if not diagnostics["running"] and not state.bounds.allow_relaunch:
+            errors.append("OpenVSP is not running and this run does not allow relaunch.")
+    else:
+        if not diagnostics["running"]:
+            errors.append("OpenVSP is not running.")
+        elif not list_windows(int(diagnostics["processes"][0]["pid"])):
+            errors.append("OpenVSP has no visible windows.")
+        if not errors:
+            bounds = ExplorationBounds(
+                max_depth=max_depth,
+                max_nodes=max_nodes,
+                max_actions=max_actions,
+                max_seconds=max_seconds,
+                max_retries=max_retries,
+                allow_relaunch=allow_relaunch,
+            )
+            state = create_exploration(
+                exploration_root,
+                graph_root,
+                registry_root,
+                int(diagnostics["processes"][0]["pid"]),
+                bounds,
+            )
+    if errors:
+        print("Exploration stopped before interaction.")
+        for error in errors:
+            print(f"- {error}")
+        return 2
+
+    try:
+        state = run_exploration(
+            state,
+            diagnostics,
+            pause_after_actions=pause_after_actions,
+            timeout=timeout,
+            ax_max_depth=ax_max_depth,
+            max_elements=max_elements,
+        )
+    except Exception as exc:
+        print(f"Exploration failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Exploration run: {state.run_path}")
+    print(f"Status: {state.status}")
+    print(f"Stop reason: {state.stop_reason}")
+    print(
+        f"Progress: tasks={state.tasks_completed}/{len(state.queue)}, "
+        f"nodes={len(state.discovered_node_ids)}/{state.bounds.max_nodes}, "
+        f"actions={state.actions_executed}/{state.bounds.max_actions}, "
+        f"elapsed={state.elapsed_seconds:.1f}/{state.bounds.max_seconds:.1f}s"
+    )
+    print(f"State file: {Path(state.run_path) / 'state.json'}")
+    if state.status == "paused":
+        print(f"Resume with: uv run python -m app_mapper explore --resume {state.run_path}")
+        return 6
+    return 3 if state.status == "failed" else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="app_mapper",
@@ -679,6 +770,26 @@ def build_parser() -> argparse.ArgumentParser:
     discovery_parser.add_argument("--timeout", type=float, default=8.0)
     discovery_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
     discovery_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+
+    explore_parser = subparsers.add_parser(
+        "explore", help="Run or resume bounded safe-navigation exploration."
+    )
+    explore_parser.add_argument("--app", choices=["OpenVSP"], default="OpenVSP")
+    explore_parser.add_argument("--resume", type=Path)
+    explore_parser.add_argument("--exploration-root", type=Path, default=DEFAULT_EXPLORATION_ROOT)
+    explore_parser.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    explore_parser.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
+    explore_parser.add_argument("--max-depth", type=int, default=1)
+    explore_parser.add_argument("--max-nodes", type=int, default=10)
+    explore_parser.add_argument("--max-actions", type=int, default=18)
+    explore_parser.add_argument("--max-seconds", type=float, default=180.0)
+    explore_parser.add_argument("--max-retries", type=int, default=1)
+    explore_parser.add_argument("--risk", choices=["safe_navigation"], default="safe_navigation")
+    explore_parser.add_argument("--allow-relaunch", action="store_true")
+    explore_parser.add_argument("--pause-after-actions", type=int)
+    explore_parser.add_argument("--timeout", type=float, default=8.0)
+    explore_parser.add_argument("--ax-max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    explore_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
     return parser
 
 
@@ -778,6 +889,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.max_candidates,
             args.timeout,
             args.max_depth,
+            args.max_elements,
+        )
+    if args.command == "explore":
+        if not 1 <= args.max_depth <= 3:
+            parser.error("--max-depth must be in [1, 3]")
+        if args.max_nodes < 2 or args.max_actions < 1 or args.max_seconds <= 0:
+            parser.error("node, action, and time bounds must be positive")
+        if not 0 <= args.max_retries <= 5:
+            parser.error("--max-retries must be in [0, 5]")
+        if args.pause_after_actions is not None and args.pause_after_actions < 1:
+            parser.error("--pause-after-actions must be positive")
+        if args.timeout <= 0 or args.ax_max_depth < 0 or args.max_elements < 1:
+            parser.error("timeout/elements must be positive and AX depth non-negative")
+        return run_bounded_exploration(
+            args.resume,
+            args.exploration_root,
+            args.graph_root,
+            args.registry_root,
+            args.max_depth,
+            args.max_nodes,
+            args.max_actions,
+            args.max_seconds,
+            args.max_retries,
+            args.allow_relaunch,
+            args.pause_after_actions,
+            args.timeout,
+            args.ax_max_depth,
             args.max_elements,
         )
     parser.error(f"Unknown command: {args.command}")

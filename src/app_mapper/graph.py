@@ -39,6 +39,18 @@ class ReplayRefused(GraphError):
     pass
 
 
+REPLAYABLE_MENU_TITLES = (
+    "OpenVSP",
+    "File",
+    "Edit",
+    "Window",
+    "View",
+    "Model",
+    "Analysis",
+    "Help",
+)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -135,6 +147,10 @@ def _open_about(pid: int, timeout: float) -> tuple[Any, dict[str, Any]]:
     return dialog
 
 
+def open_about(pid: int, timeout: float) -> tuple[Any, dict[str, Any]]:
+    return _open_about(pid, timeout)
+
+
 def _dismiss_dialog(pid: int, timeout: float) -> None:
     dialog = _current_dialog(pid)
     if dialog is None:
@@ -164,6 +180,10 @@ def _dismiss_dialog(pid: int, timeout: float) -> None:
     )
     if closed is None:
         raise GraphError("Timed out waiting for the dialog to close.")
+
+
+def dismiss_dialog(pid: int, timeout: float) -> None:
+    _dismiss_dialog(pid, timeout)
 
 
 def _node_summaries(
@@ -311,7 +331,7 @@ def export_graph(graph_root: Path, registry_root: Path) -> GraphRecord:
 
 
 def _actions() -> dict[str, EdgeAction]:
-    return {
+    actions = {
         "open_about": EdgeAction(
             action_key="open_about",
             semantic_description="Open the informational About vsp dialog",
@@ -353,6 +373,33 @@ def _actions() -> dict[str, EdgeAction]:
             reverse_action_key="open_about",
         ),
     }
+    for title in REPLAYABLE_MENU_TITLES:
+        slug = title.casefold()
+        actions[f"open_menu_{slug}"] = EdgeAction(
+            action_key=f"open_menu_{slug}",
+            semantic_description=f"Open the {title} choices menu",
+            accessibility_locator={
+                "role": "AXMenuBarItem",
+                "title": title,
+                "action": "AXPress",
+            },
+            preconditions=["verified workspace source", "no menu or dialog open"],
+            expected_postconditions=[f"{title} menu selected", "destination node verified"],
+            reverse_action_key=f"dismiss_menu_{slug}",
+        )
+        actions[f"dismiss_menu_{slug}"] = EdgeAction(
+            action_key=f"dismiss_menu_{slug}",
+            semantic_description=f"Dismiss the {title} choices menu without selection",
+            accessibility_locator={
+                "role": "AXMenuBarItem",
+                "title": title,
+                "action": "AXCancel",
+            },
+            preconditions=[f"verified {title} menu source"],
+            expected_postconditions=["workspace source node restored"],
+            reverse_action_key=f"open_menu_{slug}",
+        )
+    return actions
 
 
 def record_about_edges(
@@ -499,8 +546,10 @@ def replay_edge(
     edge = load_edge(graph_root, edge_id)
     if edge.action.risk != "safe_navigation" or not edge.action.reversible:
         raise ReplayRefused("Edge is not both safe_navigation and reversible.")
-    if edge.action.action_key not in _actions():
+    allowed_actions = _actions()
+    if edge.action.action_key not in allowed_actions:
         raise ReplayRefused(f"Action {edge.action.action_key!r} is not executable.")
+    trusted_action = allowed_actions[edge.action.action_key]
 
     run = create_observation_directory(replay_root)
     result: dict[str, Any] = {
@@ -536,6 +585,14 @@ def replay_edge(
             _open_about(pid, timeout)
         elif edge.action.action_key == "dismiss_about":
             _dismiss_dialog(pid, timeout)
+        elif edge.action.action_key.startswith("open_menu_"):
+            from app_mapper.discovery import _open_menu
+
+            _open_menu(pid, str(trusted_action.accessibility_locator["title"]), timeout)
+        elif edge.action.action_key.startswith("dismiss_menu_"):
+            from app_mapper.discovery import _close_menu
+
+            _close_menu(pid, str(trusted_action.accessibility_locator["title"]), timeout)
         result["action_performed"] = True
 
         destination_id = _capture_identified_state(
@@ -565,6 +622,20 @@ def replay_edge(
             try:
                 _dismiss_dialog(pid, timeout)
                 result["failure_cleanup"] = "dialog dismissed"
+            except Exception as cleanup_error:
+                result["failure_cleanup"] = f"failed: {cleanup_error}"
+        elif result["action_performed"] and edge.action.action_key.startswith(
+            "open_menu_"
+        ):
+            try:
+                from app_mapper.discovery import _close_menu
+
+                _close_menu(
+                    pid,
+                    str(trusted_action.accessibility_locator["title"]),
+                    timeout,
+                )
+                result["failure_cleanup"] = "menu canceled"
             except Exception as cleanup_error:
                 result["failure_cleanup"] = f"failed: {cleanup_error}"
         _update_replay(graph_root, registry_root, edge, success=False)

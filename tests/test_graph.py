@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 
 from app_mapper.graph import ReplayRefused, record_about_edges, replay_edge
-from app_mapper.models import NodeFingerprints, NodeObservation, NodeRecord
+from app_mapper.models import (
+    EdgeAction,
+    GraphEdge,
+    NodeFingerprints,
+    NodeObservation,
+    NodeRecord,
+)
 
 
 def _write_node(registry: Path, node_id: str, state_type: str) -> None:
@@ -197,3 +203,42 @@ def test_replay_executes_allowlisted_action_and_verifies_destination(
     )
     assert stored["replay"]["attempts"] == 1
     assert stored["replay"]["successes"] == 1
+
+
+def test_replay_executes_only_trusted_menu_locator(monkeypatch, tmp_path: Path) -> None:
+    graph_root = tmp_path / "graph"
+    edge_root = graph_root / "edges"
+    registry = tmp_path / "nodes"
+    replay_root = tmp_path / "replays"
+    edge_root.mkdir(parents=True)
+    source, destination = "node-workspace", "node-file-menu"
+    _write_node(registry, source, "workspace")
+    _write_node(registry, destination, "menu")
+    edge = GraphEdge(
+        edge_id="edge-file",
+        source_node_id=source,
+        destination_node_id=destination,
+        action=EdgeAction(
+            action_key="open_menu_file",
+            semantic_description="tampered description",
+            accessibility_locator={"title": "Model"},
+            preconditions=[],
+            expected_postconditions=[],
+            reverse_action_key="dismiss_menu_file",
+        ),
+        evidence=[],
+    )
+    (edge_root / "edge-file.json").write_text(edge.model_dump_json(), encoding="utf-8")
+    _capture_sequence(monkeypatch, [source, destination])
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app_mapper.discovery._open_menu",
+        lambda _pid, title, _timeout: calls.append(title),
+    )
+
+    result, _ = replay_edge(
+        "edge-file", 123, {}, graph_root, registry, replay_root, 1, 2, 20
+    )
+
+    assert result["success"] is True
+    assert calls == ["File"]

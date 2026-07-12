@@ -203,3 +203,56 @@ class DiscoveryRecord(StrictModel):
     summary: dict[str, int]
     success: bool = False
     actions_executed: int = Field(default=0, ge=0)
+
+
+class ExplorationBounds(StrictModel):
+    max_depth: int = Field(ge=1, le=3)
+    max_nodes: int = Field(ge=2, le=100)
+    max_actions: int = Field(ge=1, le=1_000)
+    max_seconds: float = Field(gt=0, le=86_400)
+    max_retries: int = Field(ge=0, le=5)
+    risk: Literal["safe_navigation"] = "safe_navigation"
+    allow_relaunch: bool = False
+
+
+class ExplorationTask(StrictModel):
+    task_id: str
+    source_node_id: str | None = None
+    depth: int = Field(ge=1)
+    action_type: Literal["menu", "about"]
+    target: str
+    status: Literal["queued", "running", "succeeded", "failed", "skipped"] = "queued"
+    attempts: int = Field(default=0, ge=0)
+    phase: Literal[
+        "queued", "source_verified", "opened", "destination_verified", "closed", "complete"
+    ] = "queued"
+    destination_node_id: str | None = None
+    return_verified: bool = False
+    loop_detected: bool = False
+    edge_ids: list[str] = Field(default_factory=list)
+    error: str | None = None
+    trace_path: str | None = None
+
+
+class ExplorationState(StrictModel):
+    schema_version: Literal[1] = 1
+    run_id: str
+    run_path: str
+    app: Literal["OpenVSP"] = "OpenVSP"
+    status: Literal["running", "paused", "completed", "failed", "stopped_bound"]
+    started_at: str
+    updated_at: str
+    completed_at: str | None = None
+    bounds: ExplorationBounds
+    graph_root: str
+    registry_root: str
+    target_pid: int
+    focus_guard_bundle_id: str | None = None
+    source_node_id: str | None = None
+    discovered_node_ids: list[str] = Field(default_factory=list)
+    expanded_node_ids: list[str] = Field(default_factory=list)
+    queue: list[ExplorationTask]
+    actions_executed: int = Field(default=0, ge=0)
+    tasks_completed: int = Field(default=0, ge=0)
+    elapsed_seconds: float = Field(default=0.0, ge=0.0)
+    stop_reason: str | None = None
