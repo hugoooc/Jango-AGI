@@ -19,6 +19,7 @@ is opened. Editing a parameter then measuring in a pristine session updates the
 geometry correctly; reusing a session (stale Mass Prop dialog, accumulated FLTK
 state) freezes the result. So we relaunch per measurement — slower, but right.
 """
+import json
 import os
 import sys
 import time
@@ -30,6 +31,31 @@ from replay import replay  # noqa: E402
 
 from . import registry as R
 from . import executor as E
+
+# Baseline results are keyed by (model, analyses) and persisted. The pristine
+# model never changes, so its mass/CG/area are measured ONCE and reused — this
+# removes one full OpenVSP launch per question.
+_BASELINE_CACHE = os.path.join(os.path.dirname(__file__), "baseline_cache.json")
+
+
+def _load_baseline(key):
+    if not os.path.exists(_BASELINE_CACHE):
+        return None
+    try:
+        return json.load(open(_BASELINE_CACHE)).get(key)
+    except Exception:
+        return None
+
+
+def _save_baseline(key, results):
+    data = {}
+    if os.path.exists(_BASELINE_CACHE):
+        try:
+            data = json.load(open(_BASELINE_CACHE))
+        except Exception:
+            data = {}
+    data[key] = results
+    json.dump(data, open(_BASELINE_CACHE, "w"), indent=2)
 
 
 class Change:
@@ -121,13 +147,20 @@ def run(req: Request, model="boeing777200.vsp3") -> dict:
                 "outputs": req.outputs}
 
     analyses = _needed_analyses(req.outputs)
+    bkey = f"{model}|{','.join(sorted(analyses))}"
 
-    # baseline: fresh session, no changes
-    base, _ = _fresh_measure(model, [], analyses)
+    # baseline: reuse the cached pristine measurement if we have it (saves a
+    # full launch); otherwise measure it once in a fresh session and cache.
+    base = _load_baseline(bkey)
+    cached = base is not None
+    if not cached:
+        base, _ = _fresh_measure(model, [], analyses)
+        _save_baseline(bkey, base)
+
     # modified: fresh session, changes applied first
     after, applied = _fresh_measure(model, req.changes, analyses)
 
-    report = {"changes": [], "outputs": {}, "seconds": None}
+    report = {"changes": [], "outputs": {}, "baseline_cached": cached, "seconds": None}
     for ch, before, target in applied:
         report["changes"].append({
             "input": ch.input_key, "mode": ch.mode, "amount": ch.amount,
