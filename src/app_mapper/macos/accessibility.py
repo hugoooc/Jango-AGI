@@ -16,6 +16,8 @@ SAFE_ATTRIBUTES = (
     ApplicationServices.kAXIdentifierAttribute,
     ApplicationServices.kAXValueAttribute,
     ApplicationServices.kAXEnabledAttribute,
+    ApplicationServices.kAXExpandedAttribute,
+    ApplicationServices.kAXSelectedAttribute,
     ApplicationServices.kAXFocusedAttribute,
     ApplicationServices.kAXPositionAttribute,
     ApplicationServices.kAXSizeAttribute,

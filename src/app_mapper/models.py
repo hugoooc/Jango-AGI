@@ -112,7 +112,7 @@ class IdentityDecision(StrictModel):
 
 
 class EdgeAction(StrictModel):
-    action_key: Literal["open_about", "dismiss_about"]
+    action_key: str = Field(min_length=1, max_length=100)
     semantic_description: str
     mechanism: Literal["macos_accessibility"] = "macos_accessibility"
     accessibility_locator: dict[str, Any]
@@ -122,7 +122,7 @@ class EdgeAction(StrictModel):
     expected_postconditions: list[str]
     risk: Literal["safe_navigation"] = "safe_navigation"
     reversible: Literal[True] = True
-    reverse_action_key: Literal["open_about", "dismiss_about"]
+    reverse_action_key: str = Field(min_length=1, max_length=100)
 
 
 class EdgeEvidence(StrictModel):
@@ -165,3 +165,41 @@ class GraphRecord(StrictModel):
     updated_at: str
     nodes: list[GraphNodeSummary]
     edges: list[GraphEdge]
+
+
+class DiscoveryCandidate(StrictModel):
+    candidate_id: str
+    label: str
+    origin: Literal["holo", "human_allowlist"]
+    classification: Literal[
+        "informational_dialog",
+        "manager_window",
+        "view_display_panel",
+        "menu",
+        "tab",
+        "excluded",
+        "unknown",
+    ]
+    confidence: float = Field(ge=0.0, le=1.0)
+    locator: dict[str, Any]
+    policy_decision: Literal["approved", "rejected"]
+    policy_reasons: list[str]
+    status: Literal["proposed", "rejected", "succeeded", "failed", "skipped"]
+    destination_node_id: str | None = None
+    return_verified: bool = False
+    trace_path: str | None = None
+    error: str | None = None
+
+
+class DiscoveryRecord(StrictModel):
+    schema_version: Literal[1] = 1
+    started_at: str
+    completed_at: str | None = None
+    mode: Literal["plan", "execute"]
+    source_node_id: str | None = None
+    interpretation_path: str | None = None
+    max_candidates: int = Field(ge=1)
+    candidates: list[DiscoveryCandidate]
+    summary: dict[str, int]
+    success: bool = False
+    actions_executed: int = Field(default=0, ge=0)

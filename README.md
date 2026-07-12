@@ -2,7 +2,7 @@
 
 An incremental Python prototype for observing and mapping the OpenVSP user interface on macOS.
 
-The project implements Milestones 1–5 from [PLAN.md](PLAN.md): observation, one allowlisted reversible interaction, Holo interpretation, stable node identity, and the first replayable graph edges. It does not modify or save an OpenVSP model.
+The project implements Milestones 1–6 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, replayable graph edges, and bounded whitelisted one-hop discovery. It does not modify or save an OpenVSP model.
 
 ## Development commands
 
@@ -14,6 +14,7 @@ uv run python -m app_mapper exercise-about
 uv run python -m app_mapper interpret
 uv run python -m app_mapper capture-node
 uv run python -m app_mapper graph show
+uv run python -m app_mapper discover-one-hop
 uv run pytest
 ```
 
@@ -110,3 +111,39 @@ uv run python -m app_mapper replay <dismiss-about-edge-id>
 To test the source-state guard, while the normal workspace is visible, try the dismiss edge again. The command must print `Replay refused safely`, state that no action was taken, and exit with code 5. In `graph show`, that edge records the refusal separately from successful replays.
 
 Inspect `artifacts/graph/graph.json` for readable action metadata, locators, preconditions, postconditions, evidence paths, and replay statistics. `artifacts/graph/graph.graphml` is the equivalent external-tool export. Every replay stores its source and destination evidence under `artifacts/replays/`.
+
+## Milestone 6 bounded one-hop discovery
+
+Start with a blank, unsaved OpenVSP workspace and no open menu or dialog. First generate a review plan; this performs no UI action:
+
+```bash
+uv run python -m app_mapper discover-one-hop
+```
+
+Expected plan:
+
+- Holo's POD dropdown, Vehicle item, and Add proposals are recorded as rejected because none has an exact executable allowlist entry.
+- File, View, and Model top-level menus are `approved | proposed`.
+- `Actions executed: 0` confirms review-only mode.
+
+Open the printed `artifacts/discovery-runs/<timestamp>/discovery.json` and review every policy reason. If the plan is correct, explicitly execute it:
+
+```bash
+uv run python -m app_mapper discover-one-hop --execute
+```
+
+Watch OpenVSP. The script should open and cancel File, then View, then Model—without selecting any item inside those menus. After each candidate it must return to the same workspace node before continuing.
+
+Expected result:
+
+```text
+menu-file  | approved | succeeded
+menu-view  | approved | succeeded
+menu-model | approved | succeeded
+Summary: rejected=3, succeeded=3
+Actions executed: 6
+```
+
+Inspect each successful candidate directory under the printed run path. It must contain `before/`, `destination/`, `returned/`, and `trace.json`; `return_verified` must be true in `discovery.json`. Confirm OpenVSP still shows `Unnamed.vsp3` and no geometry was added or modified.
+
+Finally run `uv run python -m app_mapper graph show`. If the Milestone 5 About graph was already recorded, a complete Milestone 6 run normally expands it from 2 nodes/2 edges to 5 nodes/8 edges: three menu nodes and an open/cancel edge pair for each. Failed or rejected candidates must not add graph edges.

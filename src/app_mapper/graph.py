@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -76,6 +77,24 @@ def _capture_identified_state(
             f"State identity is {decision.status}; graph recording/replay requires an unambiguous node."
         )
     return decision.node_id
+
+
+def capture_identified_state(
+    pid: int,
+    diagnostics: dict[str, Any],
+    destination: Path,
+    registry_root: Path,
+    max_depth: int,
+    max_elements: int,
+) -> str:
+    return _capture_identified_state(
+        pid,
+        diagnostics,
+        destination,
+        registry_root,
+        max_depth,
+        max_elements,
+    )
 
 
 def _new_about_dialog(
@@ -180,6 +199,20 @@ def _save_edge(graph_root: Path, edge: GraphEdge) -> GraphEdge:
     edge_root = graph_root / "edges"
     edge_root.mkdir(parents=True, exist_ok=True)
     path = edge_root / f"{edge.edge_id}.json"
+    for candidate_path in edge_root.glob("edge-*.json"):
+        if candidate_path == path:
+            continue
+        candidate = GraphEdge.model_validate(_read_json(candidate_path))
+        if candidate.action.action_key != edge.action.action_key:
+            continue
+        superseded_root = graph_root / "superseded"
+        superseded_root.mkdir(parents=True, exist_ok=True)
+        superseded_path = superseded_root / candidate_path.name
+        if superseded_path.exists():
+            superseded_path = superseded_root / (
+                f"{candidate_path.stem}-{hashlib.sha256(str(_now()).encode()).hexdigest()[:8]}.json"
+            )
+        shutil.move(candidate_path, superseded_path)
     if path.is_file():
         existing = GraphEdge.model_validate(_read_json(path))
         known_runs = {evidence.run_path for evidence in existing.evidence}
@@ -189,6 +222,39 @@ def _save_edge(graph_root: Path, edge: GraphEdge) -> GraphEdge:
         edge = existing
     write_json(path, edge.model_dump(mode="json"))
     return edge
+
+
+def persist_edge_pair(
+    graph_root: Path,
+    registry_root: Path,
+    source_node_id: str,
+    destination_node_id: str,
+    forward_action: EdgeAction,
+    reverse_action: EdgeAction,
+    evidence: EdgeEvidence,
+) -> tuple[GraphEdge, GraphEdge]:
+    forward = GraphEdge(
+        edge_id=_edge_id(
+            source_node_id, destination_node_id, forward_action.action_key
+        ),
+        source_node_id=source_node_id,
+        destination_node_id=destination_node_id,
+        action=forward_action,
+        evidence=[evidence],
+    )
+    reverse = GraphEdge(
+        edge_id=_edge_id(
+            destination_node_id, source_node_id, reverse_action.action_key
+        ),
+        source_node_id=destination_node_id,
+        destination_node_id=source_node_id,
+        action=reverse_action,
+        evidence=[evidence],
+    )
+    forward = _save_edge(graph_root, forward)
+    reverse = _save_edge(graph_root, reverse)
+    export_graph(graph_root, registry_root)
+    return forward, reverse
 
 
 def export_graph(graph_root: Path, registry_root: Path) -> GraphRecord:
@@ -372,23 +438,15 @@ def record_about_edges(
         returned_observation=str(returned_dir.resolve()),
     )
     actions = _actions()
-    forward = GraphEdge(
-        edge_id=_edge_id(source_id, destination_id, "open_about"),
-        source_node_id=source_id,
-        destination_node_id=destination_id,
-        action=actions["open_about"],
-        evidence=[evidence],
+    forward, reverse = persist_edge_pair(
+        graph_root,
+        registry_root,
+        source_id,
+        destination_id,
+        actions["open_about"],
+        actions["dismiss_about"],
+        evidence,
     )
-    reverse = GraphEdge(
-        edge_id=_edge_id(destination_id, source_id, "dismiss_about"),
-        source_node_id=destination_id,
-        destination_node_id=source_id,
-        action=actions["dismiss_about"],
-        evidence=[evidence],
-    )
-    forward = _save_edge(graph_root, forward)
-    reverse = _save_edge(graph_root, reverse)
-    export_graph(graph_root, registry_root)
     trace["success"] = True
     trace["completed_at"] = _now()
     trace["edge_ids"] = [forward.edge_id, reverse.edge_id]

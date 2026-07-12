@@ -443,7 +443,7 @@ Discover and test multiple safe navigation transitions from the main OpenVSP sta
 
 ### Status
 
-`Not started`
+`Implemented — manually validated`
 
 ## Milestone 7 — Bounded Autonomous Exploration
 
@@ -683,10 +683,10 @@ These should be answered through experiments instead of assumed upfront:
 | 3 | Read-only Holo interpretation | Implemented — manually validated |
 | 4 | Node identity and deduplication | Implemented — awaiting full manual matrix |
 | 5 | First replayable graph edge | Implemented — manually validated |
-| 6 | Whitelisted one-hop discovery | Not started |
+| 6 | Whitelisted one-hop discovery | Implemented — manually validated |
 | 7 | Bounded autonomous exploration | Not started |
 | 8 | Graph viewer and validation | Not started |
 
 ## Immediate Next Step
 
-Inspect the Milestone 5 JSON/GraphML exports and replay both recorded edges using the README procedure. Confirm the wrong-source replay is refused before beginning Milestone 6.
+Review the completed Milestone 6 discovery traces and graph export. Confirm the blank model remains unchanged, then define the bounded, resumable exploration limits required for Milestone 7.

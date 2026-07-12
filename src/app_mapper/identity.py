@@ -31,6 +31,8 @@ STABLE_ATTRIBUTES = {
     "AXHelp",
     "AXIdentifier",
     "AXEnabled",
+    "AXExpanded",
+    "AXSelected",
 }
 INTERACTIVE_ROLES = {
     "axbutton",
@@ -141,6 +143,8 @@ def _accessibility_summary(normalized: dict[str, Any]) -> dict[str, Any]:
     landmarks: set[str] = set()
     controls: Counter[str] = Counter()
     windows: list[dict[str, str]] = []
+    expanded_menus = 0
+    expanded_menu_titles: list[str] = []
     for root in (normalized.get("application"), normalized.get("menu")):
         for node in _walk_normalized(root):
             attributes = node.get("attributes", {})
@@ -156,6 +160,13 @@ def _accessibility_summary(normalized: dict[str, Any]) -> dict[str, Any]:
                 landmarks.add(f"{role}:{label}")
             if role in INTERACTIVE_ROLES:
                 controls[role] += 1
+            if role == "axmenubaritem" and (
+                attributes.get("AXExpanded") is True
+                or attributes.get("AXSelected") is True
+            ):
+                expanded_menus += 1
+                if attributes.get("AXTitle"):
+                    expanded_menu_titles.append(str(attributes["AXTitle"]))
             if role == "axwindow":
                 windows.append(
                     {
@@ -171,6 +182,8 @@ def _accessibility_summary(normalized: dict[str, Any]) -> dict[str, Any]:
         "windows": windows,
         "window_count": len(windows),
         "dialog_count": sum(window["subrole"] == "axdialog" for window in windows),
+        "expanded_menu_count": expanded_menus,
+        "expanded_menu_titles": sorted(expanded_menu_titles),
     }
 
 
@@ -192,7 +205,12 @@ def _semantic_summary(
             "source": "holo",
             "target_labels": target_labels,
         }
-    state_type = "dialog" if accessibility["dialog_count"] else "workspace"
+    if accessibility["dialog_count"]:
+        state_type = "dialog"
+    elif accessibility["expanded_menu_count"]:
+        state_type = "menu"
+    else:
+        state_type = "workspace"
     titled_windows = [window["title"] for window in accessibility["windows"] if window["title"]]
     dialog_titles = [
         window["title"]
@@ -201,6 +219,12 @@ def _semantic_summary(
     ]
     if state_type == "dialog":
         name = dialog_titles[0] if dialog_titles else "OpenVSP dialog"
+    elif state_type == "menu":
+        name = (
+            f"{accessibility['expanded_menu_titles'][0]} menu"
+            if accessibility["expanded_menu_titles"]
+            else "OpenVSP menu"
+        )
     else:
         name = next(
             (title for title in titled_windows if "openvsp" in title),
@@ -249,6 +273,8 @@ def build_observation_signals(observation_dir: Path) -> dict[str, Any]:
             "accessibility_windows": accessibility["windows"],
             "accessibility_window_count": accessibility["window_count"],
             "dialog_count": accessibility["dialog_count"],
+            "expanded_menu_count": accessibility["expanded_menu_count"],
+            "expanded_menu_titles": accessibility["expanded_menu_titles"],
             "representative_geometry": [
                 {
                     "title": window.get("title", ""),
@@ -283,6 +309,10 @@ def score_candidate(signals: dict[str, Any], node: NodeRecord) -> MatchCandidate
         reasons.append("different accessibility window count")
     if current_windows["dialog_count"] != stored_windows["dialog_count"]:
         reasons.append("different dialog count")
+    if set(current_windows.get("expanded_menu_titles", [])) != set(
+        stored_windows.get("expanded_menu_titles", [])
+    ):
+        reasons.append("different expanded top-level menu")
     if (
         signals["semantic"]["state_type"] != "unknown"
         and node.state_type != "unknown"

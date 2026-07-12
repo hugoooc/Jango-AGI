@@ -32,7 +32,11 @@ def _node(
 
 
 def _accessibility(
-    *, dialog: bool = False, position_x: int = 10, button_title: str = "Help"
+    *,
+    dialog: bool = False,
+    position_x: int = 10,
+    button_title: str = "Help",
+    expanded_menu: str | None = None,
 ) -> dict:
     windows = [
         _node(
@@ -52,9 +56,15 @@ def _accessibility(
                 children=[_node("AXButton", subrole="AXCloseButton")],
             )
         )
+    menu_children = []
+    if expanded_menu:
+        menu_item = _node("AXMenuBarItem", title=expanded_menu)
+        # FLTK exposes an open macOS menu as selected rather than expanded.
+        menu_item["attributes"]["AXSelected"] = True
+        menu_children.append(menu_item)
     return {
         "application": {"root": _node("AXApplication", children=windows)},
-        "menu": {"root": _node("AXMenuBar")},
+        "menu": {"root": _node("AXMenuBar", children=menu_children)},
     }
 
 
@@ -66,6 +76,7 @@ def _write_observation(
     position_x: int = 10,
     visual_mark: bool = False,
     button_title: str = "Help",
+    expanded_menu: str | None = None,
 ) -> Path:
     destination = root / name
     destination.mkdir()
@@ -81,6 +92,7 @@ def _write_observation(
                 dialog=dialog,
                 position_x=position_x,
                 button_title=button_title,
+                expanded_menu=expanded_menu,
             )
         ),
         encoding="utf-8",
@@ -181,3 +193,30 @@ def test_uncertain_similarity_is_surfaced_without_merging(tmp_path: Path) -> Non
     assert AMBIGUOUS_MATCH_THRESHOLD <= decision.candidates[0].score < AUTO_MATCH_THRESHOLD
     index = json.loads((registry / "index.json").read_text())
     assert index["node_count"] == 1
+
+
+def test_expanded_menu_is_distinct_and_cancel_returns_to_workspace(tmp_path: Path) -> None:
+    observations = tmp_path / "observations"
+    registry = tmp_path / "nodes"
+    observations.mkdir()
+    workspace = _write_observation(observations, "state1")
+    file_menu = _write_observation(observations, "state2", expanded_menu="File")
+    view_menu = _write_observation(observations, "state3", expanded_menu="View")
+    returned = _write_observation(observations, "state4")
+
+    workspace_decision = identify_observation(workspace, registry)
+    file_decision = identify_observation(file_menu, registry)
+    view_decision = identify_observation(view_menu, registry)
+    returned_decision = identify_observation(returned, registry)
+
+    assert file_decision.status == "new"
+    assert file_decision.node_id != workspace_decision.node_id
+    assert view_decision.status == "new"
+    assert view_decision.node_id not in {workspace_decision.node_id, file_decision.node_id}
+    file_node = json.loads((registry / file_decision.node_id / "node.json").read_text())
+    view_node = json.loads((registry / view_decision.node_id / "node.json").read_text())
+    assert file_node["state_type"] == "menu"
+    assert file_node["semantic_name"] == "file menu"
+    assert view_node["semantic_name"] == "view menu"
+    assert returned_decision.status == "matched"
+    assert returned_decision.node_id == workspace_decision.node_id

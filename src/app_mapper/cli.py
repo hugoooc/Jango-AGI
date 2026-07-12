@@ -12,6 +12,7 @@ from app_mapper.config import (
     DEFAULT_ARTIFACT_ROOT,
     DEFAULT_AX_MAX_DEPTH,
     DEFAULT_AX_MAX_ELEMENTS,
+    DEFAULT_DISCOVERY_ROOT,
     DEFAULT_GRAPH_ROOT,
     DEFAULT_GRAPH_RUN_ROOT,
     DEFAULT_INTERPRETATION_ARTIFACT_ROOT,
@@ -21,6 +22,7 @@ from app_mapper.config import (
     DEFAULT_TRANSITION_ARTIFACT_ROOT,
     OPENVSP,
 )
+from app_mapper.discovery import discover_one_hop, latest_interpretation
 from app_mapper.graph import (
     ReplayRefused,
     graph_summary,
@@ -489,6 +491,72 @@ def run_replay(
     return 0
 
 
+def run_discovery(
+    execute: bool,
+    interpretation_path: Path | None,
+    interpretation_root: Path,
+    run_root: Path,
+    graph_root: Path,
+    registry_root: Path,
+    max_candidates: int,
+    timeout: float,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    selected_interpretation = interpretation_path or latest_interpretation(
+        interpretation_root
+    )
+    diagnostics = collect_diagnostics()
+    if execute:
+        errors = _identity_preflight(diagnostics)
+        if diagnostics["running"] and not list_windows(
+            int(diagnostics["processes"][0]["pid"])
+        ):
+            errors.append(
+                "OpenVSP has no visible windows. Reopen its blank workspace before discovery."
+            )
+        if errors:
+            print("Discovery stopped before interaction.")
+            for error in errors:
+                print(f"- {error}")
+            return 2
+        pid = int(diagnostics["processes"][0]["pid"])
+    else:
+        pid = 0
+    try:
+        discovery, run = discover_one_hop(
+            pid,
+            diagnostics,
+            run_root,
+            graph_root,
+            registry_root,
+            selected_interpretation,
+            execute=execute,
+            max_candidates=max_candidates,
+            timeout=timeout,
+            max_depth=max_depth,
+            max_elements=max_elements,
+        )
+    except Exception as exc:
+        print(f"Discovery failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Discovery artifacts: {run}")
+    print(f"Mode: {discovery.mode}")
+    for candidate in discovery.candidates:
+        print(
+            f"- {candidate.candidate_id}: {candidate.label}"
+            f" | {candidate.policy_decision} | {candidate.status}"
+        )
+    print(
+        "Summary: "
+        + ", ".join(f"{key}={value}" for key, value in discovery.summary.items())
+    )
+    print(f"Actions executed: {discovery.actions_executed}")
+    if not execute:
+        print("Plan only: review discovery.json, then rerun with --execute.")
+    return 0 if discovery.success else 3
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="app_mapper",
@@ -588,6 +656,29 @@ def build_parser() -> argparse.ArgumentParser:
     replay_parser.add_argument("--timeout", type=float, default=8.0)
     replay_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
     replay_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+
+    discovery_parser = subparsers.add_parser(
+        "discover-one-hop",
+        help="Plan or execute bounded whitelisted discovery from the workspace.",
+    )
+    discovery_parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Execute approved candidates; without this flag the command only writes a review plan.",
+    )
+    discovery_parser.add_argument("--interpretation", type=Path)
+    discovery_parser.add_argument(
+        "--interpretation-root", type=Path, default=DEFAULT_INTERPRETATION_ARTIFACT_ROOT
+    )
+    discovery_parser.add_argument("--run-root", type=Path, default=DEFAULT_DISCOVERY_ROOT)
+    discovery_parser.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    discovery_parser.add_argument(
+        "--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT
+    )
+    discovery_parser.add_argument("--max-candidates", type=int, default=3)
+    discovery_parser.add_argument("--timeout", type=float, default=8.0)
+    discovery_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    discovery_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
     return parser
 
 
@@ -666,6 +757,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.graph_root,
             args.registry_root,
             args.replay_root,
+            args.timeout,
+            args.max_depth,
+            args.max_elements,
+        )
+    if args.command == "discover-one-hop":
+        if not 1 <= args.max_candidates <= 3:
+            parser.error("--max-candidates must be in [1, 3]")
+        if args.timeout <= 0:
+            parser.error("--timeout must be positive")
+        if args.max_depth < 0 or args.max_elements < 1:
+            parser.error("--max-depth must be non-negative and --max-elements must be positive")
+        return run_discovery(
+            args.execute,
+            args.interpretation,
+            args.interpretation_root,
+            args.run_root,
+            args.graph_root,
+            args.registry_root,
+            args.max_candidates,
             args.timeout,
             args.max_depth,
             args.max_elements,
