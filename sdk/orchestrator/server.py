@@ -2,16 +2,29 @@
 
 from __future__ import annotations
 
+import asyncio
+import hmac
 import json
 import os
+import secrets
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
+
+from sdk_product.voice import gradium_api_key, transcribe_microphone
 
 PORT = int(os.environ.get("LP_ORCHESTRATOR_PORT", "8765"))
+VOICE_MAX_SECONDS = float(os.environ.get("LP_VOICE_MAX_SECONDS", "300"))
+VOICE_SESSION_TTL = float(os.environ.get("LP_VOICE_SESSION_TTL", "300"))
+CSRF_TOKEN = secrets.token_urlsafe(32)
 HERE = Path(__file__).parent
+
+_voice_sessions: dict[str, dict] = {}
+_voice_lock = threading.Lock()
+_voice_busy = threading.Event()
+_ask_busy = threading.Event()
 
 
 def _load_env() -> None:
@@ -28,6 +41,69 @@ _load_env()
 
 from . import docker_fleet as fleet  # noqa: E402
 from . import agent  # noqa: E402
+
+
+def _capture_voice(stop_signal: threading.Event, on_text) -> str:
+    """Capture host microphone audio and stream live Gradium transcripts."""
+    return asyncio.run(transcribe_microphone(
+        gradium_api_key(),
+        max_seconds=VOICE_MAX_SECONDS,
+        stop_signal=stop_signal,
+        on_text=on_text,
+    ))
+
+
+def _public_voice(session: dict) -> dict:
+    return {key: session.get(key) for key in ("state", "transcript", "error")}
+
+
+def _prune_voice_sessions(now: float | None = None) -> None:
+    """Remove completed sessions after the result-retrieval window.
+
+    Caller must hold ``_voice_lock``.
+    """
+    now = time.monotonic() if now is None else now
+    expired = [
+        voice_id for voice_id, session in _voice_sessions.items()
+        if session.get("finished_at") is not None
+        and now - session["finished_at"] >= VOICE_SESSION_TTL
+    ]
+    for voice_id in expired:
+        del _voice_sessions[voice_id]
+
+
+def _run_voice(voice_id: str) -> None:
+    with _voice_lock:
+        stop_signal = _voice_sessions[voice_id]["stop_signal"]
+
+    def publish(transcript: str) -> None:
+        with _voice_lock:
+            session = _voice_sessions.get(voice_id)
+            if session:
+                session["transcript"] = transcript
+
+    try:
+        transcript = _capture_voice(stop_signal, publish)
+        with _voice_lock:
+            session = _voice_sessions.get(voice_id)
+            if session:
+                session.update(state="done", transcript=transcript)
+    except ValueError:
+        with _voice_lock:
+            session = _voice_sessions.get(voice_id)
+            if session:
+                session.update(state="error", error="No speech was transcribed")
+    except Exception as exc:
+        with _voice_lock:
+            session = _voice_sessions.get(voice_id)
+            if session:
+                session.update(state="error", error=f"{type(exc).__name__}: {exc}")
+    finally:
+        with _voice_lock:
+            session = _voice_sessions.get(voice_id)
+            if session:
+                session["finished_at"] = time.monotonic()
+        _voice_busy.clear()
 
 
 def _dispatch(items: list[fleet.Worker], values: list[float] | None, mode: str) -> list[dict]:
@@ -115,11 +191,89 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         return json.loads(self.rfile.read(length) or b"{}")
 
+    def _csrf_is_valid(self) -> bool:
+        supplied = self.headers.get("X-LegacyPilot-Token", "")
+        return bool(supplied) and hmac.compare_digest(supplied, CSRF_TOKEN)
+
+    def _handle_voice_start(self) -> None:
+        with _voice_lock:
+            _prune_voice_sessions()
+            unavailable = _voice_busy.is_set() or _ask_busy.is_set()
+            if not unavailable:
+                _voice_busy.set()
+        if unavailable:
+            self._json(409, {"error": "the fleet or voice input is already running"})
+            return
+
+        voice_id = secrets.token_urlsafe(18)
+        with _voice_lock:
+            _voice_sessions[voice_id] = {
+                "state": "running",
+                "transcript": "",
+                "error": None,
+                "stop_signal": threading.Event(),
+            }
+        threading.Thread(target=_run_voice, args=(voice_id,), daemon=True).start()
+        self._json(200, {"voice_id": voice_id})
+
+    def _handle_voice_stop(self) -> None:
+        query = parse_qs(urlparse(self.path).query)
+        voice_id = (query.get("id") or [""])[0]
+        with _voice_lock:
+            session = _voice_sessions.get(voice_id)
+            if session and session["state"] == "running":
+                session["state"] = "stopping"
+                session["stop_signal"].set()
+            public = _public_voice(session) if session else None
+        if public is None:
+            self._json(404, {"error": "unknown voice session"})
+        else:
+            self._json(200, public)
+
+    def _handle_ask(self, payload: dict) -> None:
+        with _voice_lock:
+            unavailable = _voice_busy.is_set() or _ask_busy.is_set()
+            if not unavailable:
+                _ask_busy.set()
+        if unavailable:
+            self._json(409, {"error": "the fleet or voice input is already running"})
+            return
+
+        try:
+            # ASK: the agent plans from plain language, then dispatches the
+            # fleet (spins up exactly the workers it needs) and waits.
+            question = str(payload.get("question", ""))
+            decision = agent.plan(question, max_workers=fleet.MAX_WORKERS)
+            if not decision.get("ok"):
+                self._json(400, {"error": decision.get("error", "could not plan")})
+                return
+            result = _parallel_mass_sweep(decision["values"])
+            result["question"] = question
+            result["plan"] = decision["note"]
+            self._json(200, result)
+        finally:
+            _ask_busy.clear()
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         try:
             if path == "/":
-                self._send(200, (HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
+                page = (HERE / "index.html").read_bytes().replace(
+                    b"__CSRF_TOKEN__", CSRF_TOKEN.encode(),
+                )
+                self._send(200, page, "text/html; charset=utf-8")
+                return
+            if path == "/api/voice/status":
+                query = parse_qs(urlparse(self.path).query)
+                voice_id = (query.get("id") or [""])[0]
+                with _voice_lock:
+                    _prune_voice_sessions()
+                    session = _voice_sessions.get(voice_id)
+                    public = _public_voice(session) if session else None
+                if public is None:
+                    self._json(404, {"error": "unknown voice session"})
+                else:
+                    self._json(200, public)
                 return
             if path == "/api/workers":
                 self._json(200, [item.json() for item in fleet.list_workers()])
@@ -140,6 +294,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urlparse(self.path).path
         try:
+            if path in ("/api/voice/start", "/api/voice/stop"):
+                if not self._csrf_is_valid():
+                    self._json(403, {"error": "invalid request token"})
+                    return
+                if path == "/api/voice/start":
+                    self._handle_voice_start()
+                else:
+                    self._handle_voice_stop()
+                return
             payload = self._payload()
             if path == "/api/workers/start":
                 items = fleet.ensure_workers(int(payload.get("count", 1)))
@@ -166,17 +329,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, _parallel_mass_sweep(values))
                 return
             if path == "/api/ask":
-                # ASK: the agent plans from plain language, then dispatches the
-                # fleet (spins up exactly the workers it needs) and waits.
-                question = str(payload.get("question", ""))
-                decision = agent.plan(question, max_workers=fleet.MAX_WORKERS)
-                if not decision.get("ok"):
-                    self._json(400, {"error": decision.get("error", "could not plan")})
-                    return
-                result = _parallel_mass_sweep(decision["values"])
-                result["question"] = question
-                result["plan"] = decision["note"]
-                self._json(200, result)
+                self._handle_ask(payload)
                 return
             self._json(404, {"error": "not found"})
         except (ValueError, RuntimeError, json.JSONDecodeError) as exc:

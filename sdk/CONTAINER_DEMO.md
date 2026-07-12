@@ -26,13 +26,22 @@ docker build --platform linux/amd64 \
   -t legacypilot-openvsp-worker:dev .
 
 cp .env.example .env
-python3 -m orchestrator.server
+uv venv ../.venv --python 3.12
+source ../.venv/bin/activate
+uv pip install -r requirements-voice.txt
+python -m orchestrator.server
 ```
 
 Open <http://localhost:8765>, choose the number of workers, and click **Start
 workers**. The dashboard creates the containers and displays a current screenshot
 for each one. Click **Open live desktop** to watch or manually interact with the
 real OpenVSP GUI through noVNC.
+
+The **Voice** button captures the microphone on the host Mac and streams the
+transcript through Gradium. Add `GRADIUM_API_KEY` to `sdk/.env`, speak a fleet
+request, and press **Stop**; the completed transcript is submitted through the
+same `/api/ask` route as typed requests. Microphone audio never enters an
+OpenVSP worker container.
 
 ## Tests in the dashboard
 
