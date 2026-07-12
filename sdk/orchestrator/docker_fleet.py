@@ -206,14 +206,122 @@ def wing_span_mass_actions(value: float) -> list[dict]:
     ]
 
 
-def wait_job(item: Worker, job_id: str, timeout: float = 180.0) -> dict:
-    """Poll a worker's job until it settles; return the final job dict."""
+# ---- BAKED fast path: ground each control ONCE, then replay coordinates ------
+# Every worker runs the identical fixed 1440x900 X11 desktop, and OpenVSP opens
+# its windows at the same pixels every time, so control coordinates are stable
+# and can be baked. This turns 6 vision_click calls (~4.5s each) into instant
+# baked clicks; only the final result read stays vision. ~35s run -> ~8-12s.
+
+COORD_CACHE = os.path.join(os.path.dirname(__file__), "baked_coords.json")
+
+# labels ground in-sequence during discovery (each appears only after the prior
+# click opens its window), in the exact order the mass trajectory needs them.
+_SPAN_FIELD_DESC = ("the Span numeric input field on the far right of the Span row "
+                    "in the Total Planform section")
+_DISCOVERY_STEPS = [
+    ("wing_row", "the Wing row in the Geom Browser tree", True, 1.0),
+    ("plan_tab", "the Plan tab in the Wing geometry editor", False, 0.6),
+    ("span_field", _SPAN_FIELD_DESC, False, 0.4),
+    ("analysis_menu", "the Analysis menu in the top menu bar", False, 0.6),
+    ("massprop_item", "the Mass Prop... item in the open Analysis menu", False, 0.8),
+    ("compute_btn", "the Compute button in the Mass Properties dialog", False, 1.2),
+]
+
+
+def _load_coords() -> dict:
+    if os.path.exists(COORD_CACHE):
+        try:
+            return json.load(open(COORD_CACHE))
+        except (OSError, ValueError):
+            return {}
+    return {}
+
+
+def _save_coords(coords: dict) -> None:
+    json.dump(coords, open(COORD_CACHE, "w"), indent=2)
+
+
+def discover_coords(item: Worker, force: bool = False) -> dict:
+    """Run the vision trajectory ONCE and harvest the grounded (x,y) of each
+    control into the cache. Idempotent: returns cached coords unless force."""
+    cached = _load_coords()
+    if cached and not force:
+        return cached
+    # build a discovery trajectory: vision_click each control in sequence.
+    # opening the massprop dialog needs the span set first, so we drive the full
+    # real path but capture coordinates from each vision_click result.
+    actions = [
+        {"type": "vision_click", "target": _DISCOVERY_STEPS[0][1], "double": True},
+        {"type": "sleep", "seconds": 1.0},
+        {"type": "vision_click", "target": _DISCOVERY_STEPS[1][1]},
+        {"type": "sleep", "seconds": 0.6},
+        {"type": "vision_click", "target": _DISCOVERY_STEPS[2][1]},
+        {"type": "key", "key": "ctrl+a"},
+        {"type": "type", "text": "12.0"},
+        {"type": "key", "key": "Return"},
+        {"type": "sleep", "seconds": 1.0},
+        {"type": "vision_click", "target": _DISCOVERY_STEPS[3][1]},
+        {"type": "sleep", "seconds": 0.6},
+        {"type": "vision_click", "target": _DISCOVERY_STEPS[4][1]},
+        {"type": "sleep", "seconds": 0.8},
+        {"type": "vision_click", "target": _DISCOVERY_STEPS[5][1]},
+        {"type": "sleep", "seconds": 1.0},
+    ]
+    ack = request(item, "POST", "/actions", {"actions": actions})
+    job = wait_job(item, ack["job_id"], timeout=200)
+    if job.get("state") != "done":
+        raise RuntimeError(f"discovery failed: {job.get('error')}")
+    # map each vision_click result back to its label by target text
+    by_target = {a.get("target"): (a.get("x"), a.get("y"))
+                 for a in job.get("actions", []) if a.get("type") == "vision_click"}
+    coords = {}
+    for key, target, _dbl, _slp in _DISCOVERY_STEPS:
+        if target in by_target and None not in by_target[target]:
+            coords[key] = list(by_target[target])
+    _save_coords(coords)
+    return coords
+
+
+def wing_span_mass_actions_baked(value: float, coords: dict) -> list[dict]:
+    """The fast trajectory: baked clicks (no vision) + one vision_read. Falls
+    back to a vision_click for any control missing from the cache."""
+    def clik(key, target, double=False):
+        if key in coords:
+            return {"type": "double_click" if double else "click",
+                    "x": coords[key][0], "y": coords[key][1]}
+        return {"type": "vision_click", "target": target, "double": double}
+
+    return [
+        clik("wing_row", "the Wing row in the Geom Browser tree", double=True),
+        {"type": "sleep", "seconds": 0.7},
+        clik("plan_tab", "the Plan tab in the Wing geometry editor"),
+        {"type": "sleep", "seconds": 0.4},
+        clik("span_field", _SPAN_FIELD_DESC),
+        {"type": "key", "key": "ctrl+a"},
+        {"type": "type", "text": str(value)},
+        {"type": "key", "key": "Return"},
+        {"type": "sleep", "seconds": 0.6},
+        clik("analysis_menu", "the Analysis menu in the top menu bar"),
+        {"type": "sleep", "seconds": 0.4},
+        clik("massprop_item", "the Mass Prop... item in the open Analysis menu"),
+        {"type": "sleep", "seconds": 0.6},
+        clik("compute_btn", "the Compute button in the Mass Properties dialog"),
+        {"type": "sleep", "seconds": 1.0},
+        {"type": "vision_read",
+         "prompt": "Read the Mass Properties Results panel shown on screen.",
+         "keys": ["Total_Mass", "X_Cg"]},
+    ]
+
+
+def wait_job(item: Worker, job_id: str, timeout: float = 180.0, poll: float = 0.4) -> dict:
+    """Poll a worker's job until it settles; return the final job dict.
+    Tight poll (0.4s) so we don't inflate perceived run time by up to 1.5s."""
     deadline = time.time() + timeout
     while time.time() < deadline:
         job = request(item, "GET", f"/jobs/{job_id}", timeout=15)
         if isinstance(job, dict) and job.get("state") in ("done", "error"):
             return job
-        time.sleep(1.5)
+        time.sleep(poll)
     return {"state": "timeout", "job_id": job_id}
 
 

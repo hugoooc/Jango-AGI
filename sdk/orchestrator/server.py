@@ -64,9 +64,17 @@ def _parallel_mass_sweep(values: list[float]) -> dict:
     workers = fleet.ensure_workers(len(values))
     points: list[dict | None] = [None] * len(values)
 
+    # BAKE ONCE: ground the control coordinates a single time (on worker 1),
+    # cached across runs. Every worker then replays baked clicks -> ~1 vision
+    # call per run instead of 7. This is the big speedup.
+    try:
+        coords = fleet.discover_coords(workers[0])
+    except Exception:
+        coords = {}   # fall back to fully vision-grounded if discovery fails
+
     def run_point(pos: int, item: fleet.Worker) -> None:
         try:
-            actions = fleet.wing_span_mass_actions(values[pos])
+            actions = fleet.wing_span_mass_actions_baked(values[pos], coords)
             ack = fleet.request(item, "POST", "/actions", {"actions": actions})
             job = fleet.wait_job(item, ack["job_id"])
             vals = fleet.mass_from_job(job) or {}
@@ -85,7 +93,7 @@ def _parallel_mass_sweep(values: list[float]) -> dict:
 
     pts = [p for p in points if p is not None]
     return {"study": "parallel_mass_sweep", "input": "wing_span", "output": "mass",
-            "points": pts, "workers": len(workers),
+            "points": pts, "workers": len(workers), "baked": bool(coords),
             "seconds": round(time.time() - started, 1)}
 
 
