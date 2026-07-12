@@ -39,9 +39,10 @@ def is_running(app="vsp"):
     return r.stdout.strip() == "true"
 
 
-def launch(model, timeout=90):
-    """Launch OpenVSP with `model` loaded. Returns when its windows appear.
-    `model` may be an absolute path or a name under models/."""
+def launch(model, timeout=90, settle=4.0):
+    """Launch OpenVSP with `model` loaded. Returns once the process is up and a
+    short settle has elapsed. `model` may be an absolute path or a models/ name.
+    `settle`: seconds to wait after the process appears for the GUI to paint."""
     if not os.path.isabs(model):
         model = os.path.join(os.path.dirname(__file__), "..", "models", model)
     model = os.path.abspath(model)
@@ -54,36 +55,34 @@ def launch(model, timeout=90):
     subprocess.Popen([VSP_BIN, model],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      cwd=os.path.dirname(VSP_BIN))
-    # Poll for the app + its main windows (GL window + geom browser + titled window).
+
+    # IMPORTANT: gate on the PROCESS (pgrep, ~16ms), NOT AppleScript. The first
+    # System Events query against a just-launched app blocks ~25-30s while macOS
+    # registers the process with the accessibility subsystem — even though the
+    # window is already on screen. Waiting on pgrep + a fixed settle is far
+    # faster; the accessibility handshake then overlaps our own first action.
     t0 = time.time()
     while time.time() - t0 < timeout:
-        if is_running() and _win_count() >= 2:
-            time.sleep(2.0)   # let the model finish loading into the tree
+        if subprocess.run(["pgrep", "-x", "vsp"], capture_output=True).returncode == 0:
+            time.sleep(settle)   # let the GUI paint + the model load into the tree
             return True
-        time.sleep(0.5)
-    raise RuntimeError(f"OpenVSP did not open within {timeout}s")
+        time.sleep(0.2)
+    raise RuntimeError(f"OpenVSP process did not start within {timeout}s")
 
 
 def quit(app="vsp", timeout=8):
-    """Quit OpenVSP and dismiss any 'save changes?' prompt (Don't Save).
-    Repeatable-demo requirement: leave nothing running."""
-    if not is_running(app):
+    """Kill OpenVSP fast. We never save (each session is disposable), so a hard
+    pkill is correct and avoids the slow AppleScript 'is_running' handshake and
+    any save-confirm dialog. Gated on pgrep (~16ms)."""
+    if subprocess.run(["pgrep", "-x", app], capture_output=True).returncode != 0:
         return True
-    # Ask the process to quit; VSP may pop a save-confirm dialog.
-    subprocess.run(["osascript", "-e",
-        f'tell application "System Events" to tell process "{app}" to keystroke "q" using command down'],
-        capture_output=True)
-    time.sleep(1.2)
-    # If a confirm dialog is up, press Escape / click a "Don't Save"-style button.
-    subprocess.run(["osascript", "-e",
-        'tell application "System Events" to key code 53'], capture_output=True)  # esc
-    time.sleep(0.5)
-    # Hard fallback: kill by name if still alive after grace period.
+    subprocess.run(["pkill", "-x", app], capture_output=True)
     t0 = time.time()
     while time.time() - t0 < timeout:
-        if not is_running(app):
+        if subprocess.run(["pgrep", "-x", app], capture_output=True).returncode != 0:
+            time.sleep(0.3)   # let the port/window server release
             return True
-        time.sleep(0.5)
-    subprocess.run(["pkill", "-x", "vsp"], capture_output=True)
-    time.sleep(1.0)
-    return not is_running(app)
+        time.sleep(0.2)
+    subprocess.run(["pkill", "-9", "-x", app], capture_output=True)
+    time.sleep(0.5)
+    return True
