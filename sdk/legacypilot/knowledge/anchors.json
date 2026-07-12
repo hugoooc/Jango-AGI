@@ -1,0 +1,22 @@
+{
+  "open.pathfield": {
+    "x": 756,
+    "y": 230,
+    "desc": "the folder path text field at the top of the Open dialog"
+  },
+  "open.filefield": {
+    "x": 575,
+    "y": 485,
+    "desc": "the File: input text field near the bottom of the dialog"
+  },
+  "open.accept": {
+    "x": 611,
+    "y": 511,
+    "desc": "the Accept button"
+  },
+  "open.file_in_list": {
+    "x": 605,
+    "y": 308,
+    "desc": "the boeing777200.vsp3 filename in the dialog list"
+  }
+}

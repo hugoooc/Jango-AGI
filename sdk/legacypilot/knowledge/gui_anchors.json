@@ -1,0 +1,46 @@
+{
+  "field::the Span numeric value field in the Tota": {
+    "off": [
+      426,
+      108
+    ],
+    "anchor": [
+      460,
+      828
+    ],
+    "desc": "the Span numeric value field in the Total Planform panel (top row)"
+  },
+  "tree::horizontal stabilizer": {
+    "off": [
+      96,
+      254
+    ],
+    "anchor": [
+      275,
+      673
+    ],
+    "desc": "the horizontal stabilizer item in the geometry tree"
+  },
+  "tab::Plan": {
+    "off": [
+      203,
+      65
+    ],
+    "anchor": [
+      460,
+      828
+    ],
+    "desc": "the Plan tab in the geom editor top tab bar"
+  },
+  "tree::Wing": {
+    "off": [
+      64,
+      170
+    ],
+    "anchor": [
+      275,
+      673
+    ],
+    "desc": "the Wing item in the geometry tree list"
+  }
+}

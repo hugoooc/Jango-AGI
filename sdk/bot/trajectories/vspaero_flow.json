@@ -1,0 +1,23 @@
+{
+  "name": "vspaero_flow",
+  "meta": {
+    "app": "vsp",
+    "recorded_intents": 2
+  },
+  "steps": [
+    {
+      "op": "set_field",
+      "x": 918,
+      "y": 148,
+      "desc": "the Alpha Start numeric value field in the Flow Condition panel",
+      "value": "{alpha}"
+    },
+    {
+      "op": "set_field",
+      "x": 703,
+      "y": 275,
+      "desc": "the Num CPU numeric value field on the right of the Num CPU slider",
+      "value": "{cpu}"
+    }
+  ]
+}

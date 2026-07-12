@@ -1,0 +1,10 @@
+{
+  "name": "legacypilot-standard",
+  "posture": "standard",
+  "overrides": {
+    "destructive": "approve"
+  },
+  "egress_allow": [
+    "api.hcompany.ai"
+  ]
+}

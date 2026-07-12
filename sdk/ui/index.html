@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LegacyPilot</title>
+<style>
+  :root {
+    --bg: #0b0d10;
+    --panel: #14181d;
+    --panel-2: #1b2027;
+    --line: #262d36;
+    --ink: #e6ebf0;
+    --muted: #8b96a3;
+    --accent: #5ed0b4;      /* teal */
+    --accent-dim: #2a6b5e;
+    --up: #f0806c;          /* mass up / warning */
+    --down: #5eb0f0;        /* mass down */
+    --radius: 14px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(1200px 700px at 70% -10%, #12181f 0%, var(--bg) 55%);
+    color: var(--ink); font-family: var(--sans);
+    -webkit-font-smoothing: antialiased; line-height: 1.5;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .logo {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+    display: grid; place-items: center; font-weight: 800; color: #04110d; font-size: 16px;
+  }
+  h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .tag { color: var(--muted); font-size: 13px; margin: 2px 0 32px 42px; }
+
+  /* ask box */
+  .ask {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 8px 8px 8px 18px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.35);
+    transition: border-color .15s;
+  }
+  .ask:focus-within { border-color: var(--accent-dim); }
+  .ask input {
+    flex: 1; background: transparent; border: 0; outline: 0;
+    color: var(--ink); font-size: 16px; font-family: var(--sans); padding: 12px 0;
+  }
+  .ask input::placeholder { color: #5a6472; }
+  .go {
+    background: var(--accent); color: #04110d; border: 0; cursor: pointer;
+    font-weight: 650; font-size: 14px; padding: 11px 18px; border-radius: 10px;
+    transition: transform .08s, opacity .15s;
+  }
+  .go:hover { transform: translateY(-1px); }
+  .go:disabled { opacity: .4; cursor: default; transform: none; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 2px 0; }
+  .chip {
+    font-size: 12.5px; color: var(--muted); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px;
+    cursor: pointer; transition: color .15s, border-color .15s;
+  }
+  .chip:hover { color: var(--ink); border-color: var(--accent-dim); }
+
+  /* status */
+  .status { margin-top: 30px; display: none; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; }
+  .status.show { display: flex; }
+  .spinner {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--line); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hint { color: #5a6472; font-size: 12.5px; }
+
+  /* result card */
+  .card {
+    margin-top: 28px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 24px; display: none;
+    animation: rise .3s ease both;
+  }
+  .card.show { display: block; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+  .headline { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13.5px; }
+  th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; color: var(--muted); }
+  th { color: var(--muted); font-weight: 500; font-family: var(--sans); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  td.delta.up { color: var(--up); }
+  td.delta.down { color: var(--down); }
+
+  .bars { margin-top: 22px; display: grid; gap: 14px; }
+  .bar-row { display: grid; grid-template-columns: 84px 1fr 70px; align-items: center; gap: 12px; font-size: 13px; }
+  .bar-label { color: var(--muted); }
+  .bar-track { height: 10px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--accent-dim), var(--accent)); transition: width .5s ease; }
+  .bar-val { text-align: right; font-family: var(--mono); }
+
+  .meta { margin-top: 20px; display: flex; gap: 16px; color: #5a6472; font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .err { color: var(--up); font-family: var(--mono); font-size: 13px; }
+  .badge { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">L</div>
+    <h1>LegacyPilot</h1>
+  </header>
+  <div class="tag">Ask a design question — it drives OpenVSP on this machine and answers.</div>
+
+  <div class="ask">
+    <input id="q" placeholder="e.g. impact on mass if the wingspan goes to 12m?" autofocus />
+    <button class="go" id="go">Ask</button>
+  </div>
+  <div class="chips" id="chips"></div>
+
+  <div class="status" id="status">
+    <div class="spinner"></div>
+    <div><span id="statustext">Driving OpenVSP…</span> <span class="hint">watch the desktop · <span id="elapsed">0</span>s</span></div>
+  </div>
+
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let timer = null, t0 = 0;
+
+async function loadExamples() {
+  try {
+    const ex = await (await fetch('/examples')).json();
+    const box = $('#chips');
+    ex.forEach(e => {
+      const c = document.createElement('div');
+      c.className = 'chip'; c.textContent = e;
+      c.onclick = () => { $('#q').value = e; ask(); };
+      box.appendChild(c);
+    });
+  } catch {}
+}
+
+function setBusy(b) {
+  $('#go').disabled = b;
+  $('#status').classList.toggle('show', b);
+  if (b) { t0 = Date.now(); timer = setInterval(() => $('#elapsed').textContent = Math.round((Date.now()-t0)/1000), 250); }
+  else { clearInterval(timer); }
+}
+
+async function ask() {
+  const q = $('#q').value.trim();
+  if (!q) return;
+  $('#card').classList.remove('show');
+  setBusy(true);
+  let job;
+  try {
+    const r = await fetch('/ask', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({question:q})});
+    if (!r.ok) { const e = await r.json(); return fail(e.error || 'request failed'); }
+    job = (await r.json()).job_id;
+  } catch (e) { return fail('server unreachable'); }
+  poll(job);
+}
+
+async function poll(job) {
+  try {
+    const s = await (await fetch('/status?id='+job)).json();
+    if (s.state === 'running') { setTimeout(() => poll(job), 1000); return; }
+    setBusy(false);
+    if (s.state === 'error') return fail(s.error);
+    render(s.report);
+  } catch (e) { setBusy(false); fail('lost connection'); }
+}
+
+function fail(msg) {
+  setBusy(false);
+  const c = $('#card'); c.className = 'card show';
+  c.innerHTML = `<div class="headline">Couldn't answer that</div><div class="err">${msg}</div>`;
+}
+
+// ---- render the report as headline + table + bar chart ----
+const UNIT = { Total_Mass:'', X_Cg:' m', Y_Cg:' m', Z_Cg:' m', Ixx:'', Iyy:'', Izz:'',
+               Total_Wet_Area:' m²', Total_Wet_Vol:' m³' };
+const NICE = { Total_Mass:'Mass', X_Cg:'CG X', Y_Cg:'CG Y', Z_Cg:'CG Z',
+               Ixx:'Ixx', Iyy:'Iyy', Izz:'Izz', Total_Wet_Area:'Wetted area', Total_Wet_Vol:'Volume' };
+const fmt = v => (v==null? '—' : (Math.abs(v)>=100? v.toFixed(1) : v.toFixed(3)));
+
+function render(rep) {
+  const c = $('#card'); c.className = 'card show';
+  if (rep.error) { c.innerHTML = `<div class="headline">Not run</div><div class="err">${rep.error}</div>`; return; }
+
+  const chg = rep.changes.map(x => `${x.input.replace('_',' ')} → ${fmt(x.after)}`).join(', ');
+  let sentence = summarise(rep);
+
+  // table rows across all outputs/fields
+  let rows = '';
+  const barData = [];
+  for (const [oname, o] of Object.entries(rep.outputs)) {
+    for (const k of Object.keys(o.before)) {
+      const b = o.before[k], a = o.after[k], d = o.delta[k];
+      const dir = d>0 ? 'up' : d<0 ? 'down' : '';
+      const u = UNIT[k] ?? '';
+      rows += `<tr><td>${NICE[k]||k}</td><td>${fmt(b)}${u}</td><td>${fmt(a)}${u}</td>`
+            + `<td class="delta ${dir}">${d>0?'+':''}${fmt(d)}${u}</td></tr>`;
+      if (k in NICE) barData.push({label: NICE[k]||k, before:b, after:a});
+    }
+  }
+
+  const bars = barChart(barData);
+
+  c.innerHTML = `
+    <div class="headline">${sentence}</div>
+    <div class="sub">Change: ${chg || '—'}</div>
+    <table>
+      <thead><tr><th>Quantity</th><th>Before</th><th>After</th><th>Δ</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${bars}
+    <div class="meta">
+      <span>${rep.seconds}s</span>
+      <span class="badge">${rep.baseline_cached ? 'baseline cached' : 'baseline measured'}</span>
+      <span>GUI-driven · OpenVSP</span>
+    </div>`;
+}
+
+function summarise(rep) {
+  // build a one-line natural answer from the first meaningful output
+  const first = Object.entries(rep.outputs)[0];
+  if (!first) return 'Done.';
+  const [name, o] = first;
+  const k = Object.keys(o.delta)[0];
+  const d = o.delta[k], b = o.before[k], a = o.after[k];
+  if (d == null) return 'Measured.';
+  const word = d>0 ? 'increases' : d<0 ? 'decreases' : 'is unchanged';
+  const pct = b ? ` (${(d/b*100).toFixed(1)}%)` : '';
+  return `${NICE[k]||k} ${word} from ${fmt(b)} to ${fmt(a)}${pct}.`;
+}
+
+function barChart(data) {
+  if (!data.length) return '';
+  // normalise each metric's before/after against its own max for a clean compare
+  let html = '<div class="bars">';
+  for (const row of data) {
+    const max = Math.max(Math.abs(row.before), Math.abs(row.after)) || 1;
+    const wb = Math.abs(row.before)/max*100, wa = Math.abs(row.after)/max*100;
+    html += `
+      <div class="bar-row"><div class="bar-label">${row.label} · before</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${wb}%;opacity:.5"></div></div>
+        <div class="bar-val">${fmt(row.before)}</div></div>
+      <div class="bar-row"><div class="bar-label">${row.label} · after</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${wa}%"></div></div>
+        <div class="bar-val">${fmt(row.after)}</div></div>`;
+  }
+  return html + '</div>';
+}
+
+$('#go').onclick = ask;
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
+loadExamples();
+</script>
+</body>
+</html>
