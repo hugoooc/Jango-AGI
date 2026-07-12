@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LegacyPilot · OpenVSP Fleet</title>
+<title>Otto · OpenVSP Fleet</title>
 <style>
 :root{color-scheme:dark;--bg:#091019;--panel:#111c28;--line:#223348;--ink:#edf6ff;--muted:#8da1b5;--accent:#67e8c2;--danger:#ff8d7d}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -20%,#16324a,var(--bg) 50%);color:var(--ink);font-family:Inter,system-ui,sans-serif}.wrap{max-width:1180px;margin:auto;padding:38px 24px 80px}h1{margin:0;font-size:25px}.tag{color:var(--muted);margin:5px 0 28px}.controls{display:flex;gap:12px;flex-wrap:wrap;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:14px}.controls label{display:flex;align-items:center;gap:8px;color:var(--muted)}input{background:#09131e;border:1px solid var(--line);color:var(--ink);padding:10px;border-radius:8px}button,a.button{border:0;border-radius:8px;padding:10px 14px;background:var(--accent);color:#032018;font-weight:700;cursor:pointer;text-decoration:none}button.secondary,a.secondary{background:#26384c;color:var(--ink)}button.danger{background:var(--danger);color:#2d0803}.status{min-height:24px;margin:16px 3px;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}.worker{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}.head{padding:12px 14px;display:flex;align-items:center;justify-content:space-between}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:7px}.screen{display:block;width:100%;aspect-ratio:16/10;object-fit:contain;background:#000;border-top:1px solid var(--line)}.links{display:flex;gap:8px}.links a{font-size:12px;padding:7px 9px}.empty{color:var(--muted);padding:60px 0;text-align:center}code{color:var(--accent)}
@@ -11,7 +11,7 @@
 </style>
 </head>
 <body><main class="wrap">
-<h1>LegacyPilot · OpenVSP Fleet</h1>
+<h1>Otto · OpenVSP Fleet</h1>
 <p class="tag">Ask in plain language · the agent spins up the workers it needs and runs the simulations in parallel · GUI-only, no application API</p>
 <section class="controls" style="align-items:center">
   <input id="q" placeholder="e.g. sweep the wingspan from 8 to 20 in 6 points and plot the mass"
@@ -61,7 +61,7 @@ async function askAgent(){if(voiceId||agentBusy)return;const q=$('#q').value.tri
 function setMetric(m){METRIC=m;drawChart()}
 // Catmull-Rom -> smooth cubic bezier path through the points (a real curve)
 function spline(pts){if(pts.length<3)return pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');let d='M'+pts[0][0].toFixed(1)+' '+pts[0][1].toFixed(1);for(let i=0;i<pts.length-1;i++){const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;const c1x=p1[0]+(p2[0]-p0[0])/6,c1y=p1[1]+(p2[1]-p0[1])/6,c2x=p2[0]-(p3[0]-p1[0])/6,c2y=p2[1]-(p3[1]-p1[1])/6;d+=`C${c1x.toFixed(1)} ${c1y.toFixed(1)},${c2x.toFixed(1)} ${c2y.toFixed(1)},${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`}return d}
-function drawChart(){const out=LAST;if(!out)return;const el=$('#chart');const key=METRIC;const pts=out.points.filter(p=>p[key]!=null).sort((a,b)=>a.x-b.x);const seq=(out.points.length*out.seconds/Math.max(out.workers,1)).toFixed(0);const speed=(seq/Math.max(out.seconds,1)).toFixed(1);const m=METRICS[key]||{label:key,unit:''};
+function drawChart(){const out=LAST;if(!out)return;const el=$('#chart');const key=METRIC;const pts=out.points.filter(p=>p[key]!=null).sort((a,b)=>a.x-b.x);const seq=out.sequential_seconds||out.points.reduce((s,p)=>s+(p.run_seconds||0),0);const speed=(out.speedup||(seq/Math.max(out.seconds,1))).toFixed(1);const m=METRICS[key]||{label:key,unit:''};
   busy(`✅ ${out.plan||''} — ${out.points.length} designs across ${out.workers} parallel workers in ${out.seconds}s.`);
   if(!pts.length){el.innerHTML='';return}
   const W=920,H=340,P=54;const xs=pts.map(p=>p.x),ys=pts.map(p=>p[key]);const xmin=Math.min(...xs),xmax=Math.max(...xs);let ymin=Math.min(...ys),ymax=Math.max(...ys);const pad=(ymax-ymin)*0.12||1;ymin-=pad;ymax+=pad;
@@ -74,7 +74,7 @@ function drawChart(){const out=LAST;if(!out)return;const el=$('#chart');const ke
   el.innerHTML=`<div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;margin-bottom:16px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div style="font-size:20px;font-weight:800">${m.label} vs wing span</div>
-      <div style="background:linear-gradient(90deg,#67e8c2,#3bb897);color:#04211a;font-weight:800;padding:6px 14px;border-radius:999px;font-size:14px">⚡ ${out.workers} parallel workers · ${out.seconds}s · ${speed}× faster than sequential</div>
+      <div style="background:linear-gradient(90deg,#67e8c2,#3bb897);color:#04211a;font-weight:800;padding:6px 14px;border-radius:999px;font-size:14px">⚡ ${out.workers} parallel workers · ${out.seconds}s vs ${Math.round(seq)}s sequential · ${speed}× faster</div>
     </div>
     <div style="color:var(--muted);font-size:13px;margin:6px 0 14px">Each point is a full OpenVSP simulation on its own container — GUI-driven (pixels in, mouse/keyboard out), no application API.</div>
     <div style="display:flex;gap:8px;margin-bottom:6px">${toggles}</div>

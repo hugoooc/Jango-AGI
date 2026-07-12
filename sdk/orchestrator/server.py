@@ -163,7 +163,8 @@ def _parallel_mass_sweep(values: list[float], fresh: bool = True) -> dict:
             points[pos] = {"x": values[pos], "y": vals.get("Total_Mass"),
                            "cg_x": vals.get("X_Cg"), "ixx": vals.get("Ixx"),
                            "izz": vals.get("Izz"), "worker": item.index,
-                           "state": job.get("state")}
+                           "state": job.get("state"),
+                           "run_seconds": job.get("seconds")}
         except Exception as exc:
             points[pos] = {"x": values[pos], "y": None, "worker": item.index,
                            "error": f"{type(exc).__name__}: {exc}"}
@@ -175,9 +176,15 @@ def _parallel_mass_sweep(values: list[float], fresh: bool = True) -> dict:
         t.join()
 
     pts = [p for p in points if p is not None]
+    wall = round(time.time() - started, 1)
+    # honest speedup: sequential would be the SUM of each worker's own run time;
+    # parallel is the wall-clock. (Dividing wall-clock by worker count cancels
+    # the parallelism and always yields ~1x — that was the bug.)
+    sequential = round(sum((p.get("run_seconds") or 0) for p in pts), 1)
+    speedup = round(sequential / wall, 1) if wall > 0 and sequential > 0 else 1.0
     return {"study": "parallel_mass_sweep", "input": "wing_span", "output": "mass",
             "points": pts, "workers": len(workers), "baked": bool(coords),
-            "seconds": round(time.time() - started, 1)}
+            "seconds": wall, "sequential_seconds": sequential, "speedup": speedup}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -347,7 +354,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"LegacyPilot container fleet → http://localhost:{PORT}")
+    print(f"Otto container fleet → http://localhost:{PORT}")
     server.serve_forever()
 
 
