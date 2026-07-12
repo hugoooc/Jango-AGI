@@ -1,0 +1,36 @@
+{
+  "name": "set_wing_span",
+  "summary": "Set the wing root section span.",
+  "kind": "field",
+  "params": [
+    {
+      "name": "value",
+      "type": "float",
+      "unit": "m"
+    }
+  ],
+  "preconditions": [
+    "model_loaded",
+    "wing_editor_open",
+    "sect_tab"
+  ],
+  "steps": [
+    {
+      "op": "set_field",
+      "key": "wing.sect.span",
+      "desc": "the numeric value box on the far right of the Span row",
+      "value": "{value}"
+    }
+  ],
+  "verify": {
+    "read_label": "Projected Span"
+  },
+  "parm": {
+    "geom": "Wing",
+    "group": "XSec_1",
+    "name": "Span"
+  },
+  "confidence": 0.9,
+  "recovery": "re-localize field then retry once",
+  "verified": true
+}

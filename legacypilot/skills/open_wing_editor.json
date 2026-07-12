@@ -1,0 +1,36 @@
+{
+  "name": "open_wing_editor",
+  "summary": "Open the Wing geometry editor and select its Sect tab.",
+  "kind": "composite",
+  "params": [],
+  "preconditions": [
+    "model_loaded"
+  ],
+  "steps": [
+    {
+      "op": "click",
+      "key": "geom.wing_node",
+      "double": true,
+      "desc": "the word Wing in the Geom Browser tree, indented under fuselage"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "click",
+      "key": "wing.tab.sect",
+      "desc": "the Sect tab in the Wing editor tab row (between Plan and Airfoil)"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.0
+    }
+  ],
+  "verify": {
+    "read_label": "Projected Span"
+  },
+  "confidence": 0.85,
+  "recovery": "re-localize tree node and tab",
+  "verified": true
+}

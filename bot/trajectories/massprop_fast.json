@@ -1,0 +1,65 @@
+{
+  "name": "massprop_fast",
+  "meta": {
+    "app": "vsp",
+    "recorded_intents": 6,
+    "starts_from": "clean baseline (reset)"
+  },
+  "steps": [
+    {
+      "op": "menu",
+      "path": [
+        "Analysis",
+        "Mass Prop..."
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "set_field",
+      "desc": "the Num Slice numeric value field at the top right of the dialog",
+      "off": [
+        150,
+        66
+      ],
+      "anchor": [
+        300,
+        508
+      ],
+      "value": "{slices}"
+    },
+    {
+      "op": "click",
+      "desc": "the Compute button",
+      "off": [
+        150,
+        174
+      ],
+      "anchor": [
+        300,
+        508
+      ],
+      "double": false,
+      "no_guard": false
+    },
+    {
+      "op": "wait",
+      "seconds": 0.8
+    },
+    {
+      "op": "read_results",
+      "panel": "Mass Properties Results",
+      "fields": [
+        "Total_Mass",
+        "X_Cg",
+        "Y_Cg",
+        "Z_Cg",
+        "Ixx",
+        "Iyy",
+        "Izz"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "name": "vspaero_solve",
+  "meta": {
+    "app": "vsp",
+    "recorded_intents": 9,
+    "starts_from": "clean baseline (reset)"
+  },
+  "steps": [
+    {
+      "op": "menu",
+      "path": [
+        "Analysis",
+        "Aero",
+        "VSPAERO..."
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "set_field",
+      "desc": "the Alpha Start numeric value field in the Flow Condition panel",
+      "off": [
+        651,
+        107
+      ],
+      "anchor": [
+        1000,
+        828
+      ],
+      "value": "{alpha}"
+    },
+    {
+      "op": "set_field",
+      "desc": "the Alpha End numeric value field in the Flow Condition panel",
+      "off": [
+        772,
+        105
+      ],
+      "anchor": [
+        1000,
+        828
+      ],
+      "value": "{alpha_end}"
+    },
+    {
+      "op": "set_field",
+      "desc": "the Mach Start numeric value field in the Flow Condition panel",
+      "off": [
+        660,
+        147
+      ],
+      "anchor": [
+        1000,
+        828
+      ],
+      "value": "{mach}"
+    },
+    {
+      "op": "click",
+      "desc": "the Prepare Solver button at the bottom right of the window",
+      "off": [
+        908,
+        773
+      ],
+      "anchor": [
+        1000,
+        828
+      ],
+      "double": false,
+      "no_guard": false
+    },
+    {
+      "op": "wait",
+      "seconds": 4.0
+    },
+    {
+      "op": "click",
+      "desc": "the Launch Solver button at the bottom left of the window",
+      "off": [
+        201,
+        772
+      ],
+      "anchor": [
+        1000,
+        828
+      ],
+      "double": false,
+      "no_guard": false
+    },
+    {
+      "op": "wait_console",
+      "desc": "the solver console text area at the bottom",
+      "off": [
+        495,
+        698
+      ],
+      "anchor": [
+        1000,
+        828
+      ],
+      "contains": "Done",
+      "timeout": 120
+    }
+  ]
+}

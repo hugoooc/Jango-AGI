@@ -1,0 +1,40 @@
+...Comp Geom...
+9 Num Comps
+15 Total Num Meshes
+35600 Total Num Tris
+
+Theo_Area   Wet_Area   Theo_Vol    Wet_Vol  Name
+  404.602    347.409    358.417    319.749  fuselage       
+  144.342    111.232     29.768     23.834  Wing           
+  144.342    111.232     29.768     23.834  Wing           
+   41.787     39.324      7.385      7.220  engine         
+   41.787     39.324      7.385      7.220  engine         
+    6.860      3.705      0.780      0.438  fan            
+    6.860      3.705      0.780      0.438  fan            
+    1.789      1.423      0.142      0.117  PodGeom        
+    1.789      1.423      0.142      0.117  PodGeom        
+  163.883     52.644    137.709     45.960  base fuselage  
+   44.171     35.739      5.944      4.997  horizontal stabilizer
+   44.171     35.739      5.944      4.997  horizontal stabilizer
+   65.823     59.806      9.145      8.633  vertical stabilizer
+    6.816      3.033      0.799      0.369  fixation       
+    6.816      3.033      0.799      0.369  fixation       
+-------------------------------------------------
+ 1125.839    848.770    594.906    448.292  Totals         
+
+Tag_Theo_Area   Tag_Wet_Area    Tag_Name
+      404.602        347.409    fuselage_S_Surf0
+      144.342        111.232    Wing_S_Surf0   
+      144.342        111.232    Wing_S_Surf1   
+       41.787         39.324    engine_S_Surf0 
+       41.787         39.324    engine_S_Surf1 
+        6.860          3.705    fan_S_Surf0    
+        6.860          3.705    fan_S_Surf1    
+        1.789          1.423    PodGeom_S_Surf0
+        1.789          1.423    PodGeom_S_Surf1
+      163.883         52.644    base fuselage_S_Surf0
+       44.171         35.739    horizontal stabilizer_S_Surf0
+       44.171         35.739    horizontal stabilizer_S_Surf1
+       65.823         59.806    vertical stabilizer_S_Surf0
+        6.816          3.033    fixation_S_Surf0
+        6.816          3.033    fixation_S_Surf1

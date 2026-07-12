@@ -1,0 +1,87 @@
+{
+  "File": [
+    "New",
+    "Open...",
+    "Save...",
+    "Save As...",
+    "Save Set...",
+    "Insert...",
+    "Import...",
+    "Export...",
+    "Run Script...",
+    "Preferences...",
+    "Exit"
+  ],
+  "Edit": [
+    "Undo Parameter Change",
+    "Cut",
+    "Copy",
+    "Paste",
+    "Delete",
+    "Select All",
+    "Toggle Pick Mode"
+  ],
+  "Window": [
+    "One",
+    "Four",
+    "Two Horizontal",
+    "Two Vertical",
+    "Background...",
+    "3D Background...",
+    "Screenshot...",
+    "Axis Toggle",
+    "Border Toggle"
+  ],
+  "View": [
+    "Top",
+    "Front",
+    "Left",
+    "Left Iso",
+    "Bottom",
+    "Rear",
+    "Right",
+    "Right Iso",
+    "Set Rotation Center",
+    "View Normal To",
+    "View Front Of",
+    "Center",
+    "Center All",
+    "Fit On Screen",
+    "Fit All On Screen",
+    "Reset All",
+    "Adjust..."
+  ],
+  "Model": [
+    "Geometry...",
+    "Set Editor...",
+    "Variable Presets...",
+    "Mode Editor...",
+    "Link...",
+    "Design Variables...",
+    "Measure...",
+    "Lighting...",
+    "Clipping...",
+    "Texture...",
+    "Adv Link...",
+    "User Parms...",
+    "Attribute Explorer...",
+    "Vehicle Notes...",
+    "Fit Model...",
+    "Snap To..."
+  ],
+  "Analysis": [
+    "CompGeom...",
+    "Planar Slice...",
+    "Mass Prop...",
+    "Projected Area...",
+    "Geometry Analysis...",
+    "DegenGeom...",
+    "Trimmed Surfaces...",
+    "CFD Mesh...",
+    "Structure",
+    "Aero"
+  ],
+  "Help": [
+    "Help..."
+  ]
+}

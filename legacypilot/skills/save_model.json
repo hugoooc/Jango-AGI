@@ -1,0 +1,23 @@
+{
+  "name": "save_model",
+  "summary": "Save the current model (Cmd+S).",
+  "kind": "composite",
+  "params": [],
+  "preconditions": [
+    "model_loaded"
+  ],
+  "steps": [
+    {
+      "op": "cmd",
+      "letter": "s"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    }
+  ],
+  "verify": {},
+  "confidence": 0.95,
+  "recovery": "",
+  "verified": true
+}

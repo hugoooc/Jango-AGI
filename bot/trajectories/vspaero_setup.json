@@ -1,0 +1,48 @@
+{
+  "name": "vspaero_setup",
+  "meta": {
+    "app": "vsp",
+    "recorded_intents": 4,
+    "starts_from": "clean baseline (reset)"
+  },
+  "steps": [
+    {
+      "op": "menu",
+      "path": [
+        "Analysis",
+        "Aero",
+        "VSPAERO..."
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "set_field",
+      "desc": "the Alpha Start numeric value field in the Flow Condition panel",
+      "off": [
+        636,
+        106
+      ],
+      "anchor": [
+        1000,
+        828
+      ],
+      "value": "{alpha}"
+    },
+    {
+      "op": "set_field",
+      "desc": "the Num CPU numeric value field to the right of the Num CPU slider",
+      "off": [
+        450,
+        232
+      ],
+      "anchor": [
+        1000,
+        828
+      ],
+      "value": "{cpu}"
+    }
+  ]
+}

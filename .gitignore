@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+derisk/run/
+derisk/runs/
+*.pyc
+.DS_Store
+.env
+.vsptime
+
+# runtime artifacts (screenshots, solver output) — not source
+cu/shots/
+models/*.adb
+models/*.adb.cases
+models/*.polar
+models/*.history
+models/*.lod
+models/*.vspgeom
+models/*.csf
+models/*.group.*
+models/*.vkey
+models/aero_run/
+models/lp_runs/

@@ -1,0 +1,34 @@
+{
+  "name": "set_wing_sweep",
+  "summary": "Set the wing leading-edge sweep angle.",
+  "kind": "field",
+  "params": [
+    {
+      "name": "value",
+      "type": "float",
+      "unit": "deg"
+    }
+  ],
+  "preconditions": [
+    "model_loaded",
+    "wing_editor_open",
+    "sect_tab"
+  ],
+  "steps": [
+    {
+      "op": "set_field",
+      "key": "wing.sect.sweep",
+      "desc": "the numeric value box on the far right of the Sweep row",
+      "value": "{value}"
+    }
+  ],
+  "verify": {},
+  "parm": {
+    "geom": "Wing",
+    "group": "XSec_1",
+    "name": "Sweep"
+  },
+  "confidence": 0.9,
+  "recovery": "re-localize field then retry once",
+  "verified": true
+}

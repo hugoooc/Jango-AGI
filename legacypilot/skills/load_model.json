@@ -1,0 +1,76 @@
+{
+  "name": "load_model",
+  "summary": "Open a .vsp3 model via File > Open.",
+  "kind": "composite",
+  "params": [
+    {
+      "name": "dir",
+      "type": "path"
+    },
+    {
+      "name": "file",
+      "type": "str"
+    }
+  ],
+  "preconditions": [
+    "app_focused"
+  ],
+  "steps": [
+    {
+      "op": "menu",
+      "path": [
+        "File",
+        "Open..."
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "fill_field",
+      "key": "open.pathfield",
+      "desc": "the folder path text field at the top of the Open dialog",
+      "value": "{dir}"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "key",
+      "name": "return"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "click",
+      "key": "open.file_in_list",
+      "double": true,
+      "no_guard": true,
+      "desc": "the file named {file} in the dialog file list"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.8
+    },
+    {
+      "op": "click",
+      "key": "open.accept",
+      "no_guard": true,
+      "desc": "the Accept button at the bottom left of the dialog"
+    },
+    {
+      "op": "wait",
+      "seconds": 3.0
+    }
+  ],
+  "verify": {
+    "title_contains": "{file}"
+  },
+  "confidence": 0.85,
+  "recovery": "re-localize dialog fields",
+  "verified": true
+}
