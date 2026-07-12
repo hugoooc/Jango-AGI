@@ -188,5 +188,6 @@ python -m ui.server
 ```
 
 Open `http://localhost:8765`, then type a question or select **Voice**. A voice
-request records a fixed 10-second turn, inserts the Gradium transcript into the
-question field, and submits it through the same `engine.ask` path as typed input.
+request streams the Gradium transcript into the question field as you speak.
+Select **Stop** when finished; the server flushes the final text and submits it
+through the same `engine.ask` path as typed input.

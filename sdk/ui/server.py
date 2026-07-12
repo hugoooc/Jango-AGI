@@ -10,7 +10,9 @@ and a chart.
 Endpoints:
   GET  /              the dashboard page
   POST /ask           {question, slow?} -> {job_id}   (starts a background job)
-  POST /voice         {} -> {transcript}              (captures one microphone turn)
+  POST /voice/start   {} -> {voice_id}                (starts microphone streaming)
+  POST /voice/stop?id=..                                (flushes and ends the turn)
+  GET  /voice/status?id=.. -> {state, transcript, error}
   GET  /status?id=..  -> {state, report|error, seconds}
   GET  /examples      -> a few ready-made questions
 
@@ -34,6 +36,7 @@ HERE = os.path.dirname(__file__)
 PORT = int(os.environ.get("LP_PORT", "8765"))
 
 _jobs = {}                      # job_id -> {state, report, error, seconds, question}
+_voice_sessions = {}            # voice_id -> internal capture state
 _lock = threading.Lock()
 _busy = threading.Event()       # only one OpenVSP job at a time
 _voice_busy = threading.Event() # only one microphone capture at a time
@@ -60,9 +63,41 @@ def _run_job(job_id, question, slow):
         _busy.clear()
 
 
-def _capture_voice():
-    """Capture one turn on the server Mac; kept separate for deterministic tests."""
-    return asyncio.run(transcribe_microphone(gradium_api_key()))
+def _capture_voice(stop_signal, on_text):
+    """Stream until Stop is requested; kept separate for deterministic tests."""
+    return asyncio.run(transcribe_microphone(
+        gradium_api_key(), max_seconds=None, stop_signal=stop_signal, on_text=on_text,
+    ))
+
+
+def _run_voice(voice_id):
+    with _lock:
+        stop_signal = _voice_sessions[voice_id]["stop_signal"]
+
+    def publish(transcript):
+        with _lock:
+            _voice_sessions[voice_id]["transcript"] = transcript
+
+    try:
+        transcript = _capture_voice(stop_signal, publish)
+        with _lock:
+            _voice_sessions[voice_id].update(state="done", transcript=transcript)
+    except ValueError:
+        with _lock:
+            _voice_sessions[voice_id].update(
+                state="error", error="No speech was transcribed",
+            )
+    except Exception as exc:
+        with _lock:
+            _voice_sessions[voice_id].update(
+                state="error", error=f"{type(exc).__name__}: {exc}",
+            )
+    finally:
+        _voice_busy.clear()
+
+
+def _public_voice(session):
+    return {key: session.get(key) for key in ("state", "transcript", "error")}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -93,13 +128,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, json.dumps({"error": "unknown job"}))
             else:
                 self._send(200, json.dumps(job))
+        elif path == "/voice/status":
+            qs = parse_qs(urlparse(self.path).query)
+            voice_id = (qs.get("id") or [""])[0]
+            with _lock:
+                session = _voice_sessions.get(voice_id)
+                public = _public_voice(session) if session else None
+            if not public:
+                self._send(404, json.dumps({"error": "unknown voice session"}))
+            else:
+                self._send(200, json.dumps(public))
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path == "/voice":
-            self._handle_voice()
+        if path == "/voice/start":
+            self._handle_voice_start()
+            return
+        if path == "/voice/stop":
+            self._handle_voice_stop()
             return
         if path != "/ask":
             self._send(404, json.dumps({"error": "not found"}))
@@ -128,7 +176,7 @@ class Handler(BaseHTTPRequestHandler):
                          daemon=True).start()
         self._send(200, json.dumps({"job_id": job_id}))
 
-    def _handle_voice(self):
+    def _handle_voice_start(self):
         with _lock:
             unavailable = _busy.is_set() or _voice_busy.is_set()
             if not unavailable:
@@ -136,13 +184,28 @@ class Handler(BaseHTTPRequestHandler):
         if unavailable:
             self._send(409, json.dumps({"error": "busy — LegacyPilot is already running"}))
             return
-        try:
-            transcript = _capture_voice()
-            self._send(200, json.dumps({"transcript": transcript}))
-        except Exception as exc:
-            self._send(500, json.dumps({"error": f"{type(exc).__name__}: {exc}"}))
-        finally:
-            _voice_busy.clear()
+        voice_id = str(int(time.time() * 1000))
+        with _lock:
+            _voice_sessions[voice_id] = {
+                "state": "running", "transcript": "", "error": None,
+                "stop_signal": threading.Event(),
+            }
+        threading.Thread(target=_run_voice, args=(voice_id,), daemon=True).start()
+        self._send(200, json.dumps({"voice_id": voice_id}))
+
+    def _handle_voice_stop(self):
+        qs = parse_qs(urlparse(self.path).query)
+        voice_id = (qs.get("id") or [""])[0]
+        with _lock:
+            session = _voice_sessions.get(voice_id)
+            if session and session["state"] == "running":
+                session["state"] = "stopping"
+                session["stop_signal"].set()
+            public = _public_voice(session) if session else None
+        if not public:
+            self._send(404, json.dumps({"error": "unknown voice session"}))
+        else:
+            self._send(200, json.dumps(public))
 
 
 def main():

@@ -1,6 +1,12 @@
 import unittest
+import inspect
 
-from sdk_product.voice import _turn_has_ended, build_parser, normalize_request
+from sdk_product.voice import (
+    _turn_has_ended,
+    build_parser,
+    normalize_request,
+    transcribe_microphone,
+)
 
 
 class VoiceTests(unittest.TestCase):
@@ -18,6 +24,12 @@ class VoiceTests(unittest.TestCase):
             "vad": [{"horizon_s": 2.0, "inactivity_prob": 0.9}],
         }
         self.assertTrue(_turn_has_ended(message, heard_text=True, threshold=0.8))
+
+    def test_manual_stop_is_supported_without_timeout(self):
+        params = inspect.signature(transcribe_microphone).parameters
+        self.assertIn("stop_signal", params)
+        self.assertIn("on_text", params)
+        self.assertEqual(params["max_seconds"].default, 10.0)
 
 
 if __name__ == "__main__":

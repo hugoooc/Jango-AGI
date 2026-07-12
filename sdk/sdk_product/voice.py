@@ -13,8 +13,9 @@ import asyncio
 import json
 import os
 import sys
+import threading
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 DEFAULT_REQUEST = (
     "Increase wing span by 12 percent. How do mass and center of gravity change?"
@@ -75,8 +76,10 @@ async def transcribe_microphone(
     api_key: str,
     *,
     language: str = "en",
-    max_seconds: float = 10.0,
+    max_seconds: Optional[float] = 10.0,
     vad_threshold: float = 1.1,
+    stop_signal: Optional[threading.Event] = None,
+    on_text: Optional[Callable[[str], None]] = None,
 ) -> str:
     """Capture one local microphone turn and return its Gradium transcript."""
     try:
@@ -135,20 +138,27 @@ async def transcribe_microphone(
                 if kind == "text" and message.get("text"):
                     transcript.append(message["text"])
                     print(message["text"], end=" ", flush=True)
+                    if on_text:
+                        on_text(normalize_request(" ".join(transcript)))
                 elif _turn_has_ended(message, bool(transcript), vad_threshold):
                     stop_capture.set()
                 elif kind == "end_of_stream":
                     return
 
-        async def deadline() -> None:
-            try:
-                await asyncio.wait_for(stop_capture.wait(), timeout=max_seconds)
-            except asyncio.TimeoutError:
-                stop_capture.set()
+        async def stop_monitor() -> None:
+            started = loop.time()
+            while not stop_capture.is_set():
+                if stop_signal and stop_signal.is_set():
+                    stop_capture.set()
+                    return
+                if max_seconds is not None and loop.time() - started >= max_seconds:
+                    stop_capture.set()
+                    return
+                await asyncio.sleep(0.05)
 
         print("Speak now…", flush=True)
         try:
-            await asyncio.gather(producer(), consumer(), deadline())
+            await asyncio.gather(producer(), consumer(), stop_monitor())
         except sd.PortAudioError as exc:
             raise RuntimeError(
                 "microphone unavailable; grant Microphone access to the terminal in "

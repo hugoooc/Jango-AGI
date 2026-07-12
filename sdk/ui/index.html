@@ -136,8 +136,8 @@
 
   <div class="ask">
     <input id="q" placeholder="e.g. impact on mass if the wingspan goes to 12m?" autofocus />
-    <button class="voice" id="voice" type="button" aria-label="Speak a design question" aria-pressed="false">
-      <span class="voice-dot" aria-hidden="true"></span><span>Voice</span>
+    <button class="voice" id="voice" type="button" aria-label="Start voice input" aria-pressed="false">
+      <span class="voice-dot" aria-hidden="true"></span><span id="voice-label">Voice</span>
     </button>
     <button class="go" id="go">Ask</button>
   </div>
@@ -154,6 +154,7 @@
 <script>
 const $ = s => document.querySelector(s);
 let timer = null, t0 = 0;
+let voiceId = null;
 
 async function loadExamples() {
   try {
@@ -176,6 +177,24 @@ function setBusy(b) {
   else { clearInterval(timer); }
 }
 
+function setListening(listening) {
+  const button = $('#voice');
+  $('#go').disabled = listening;
+  button.disabled = false;
+  button.classList.toggle('listening', listening);
+  button.setAttribute('aria-pressed', String(listening));
+  button.setAttribute('aria-label', listening ? 'Stop voice input' : 'Start voice input');
+  $('#voice-label').textContent = listening ? 'Stop' : 'Voice';
+  $('#status').classList.toggle('show', listening);
+  if (listening) {
+    t0 = Date.now();
+    clearInterval(timer);
+    timer = setInterval(() => $('#elapsed').textContent = Math.round((Date.now()-t0)/1000), 250);
+  } else {
+    clearInterval(timer);
+  }
+}
+
 async function ask() {
   const q = $('#q').value.trim();
   if (!q) return;
@@ -191,26 +210,66 @@ async function ask() {
   poll(job);
 }
 
-async function listen() {
-  const button = $('#voice');
+async function startListening() {
   $('#card').classList.remove('show');
-  button.classList.add('listening');
-  button.setAttribute('aria-pressed', 'true');
-  $('#statustext').textContent = 'Listening for 10 seconds…';
-  setBusy(true);
+  $('#statustext').textContent = 'Listening… speak, then press Stop.';
+  setListening(true);
   try {
-    const response = await fetch('/voice', {method:'POST'});
+    $('#voice').disabled = true;
+    const response = await fetch('/voice/start', {method:'POST'});
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'voice capture failed');
-    $('#q').value = payload.transcript;
+    if (!response.ok) throw new Error(payload.error || 'could not start voice input');
+    voiceId = payload.voice_id;
+    $('#voice').disabled = false;
+    pollVoice(voiceId);
   } catch (error) {
-    return fail(error.message || 'voice capture failed');
-  } finally {
-    button.classList.remove('listening');
-    button.setAttribute('aria-pressed', 'false');
-    setBusy(false);
+    voiceId = null;
+    setListening(false);
+    fail(error.message || 'could not start voice input');
   }
-  ask();
+}
+
+async function stopListening() {
+  if (!voiceId) return;
+  $('#voice').disabled = true;
+  $('#statustext').textContent = 'Finalizing transcript…';
+  try {
+    const response = await fetch('/voice/stop?id='+encodeURIComponent(voiceId), {method:'POST'});
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'could not stop voice input');
+  } catch (error) {
+    voiceId = null;
+    setListening(false);
+    fail(error.message || 'could not stop voice input');
+  }
+}
+
+async function pollVoice(id) {
+  if (id !== voiceId) return;
+  try {
+    const response = await fetch('/voice/status?id='+encodeURIComponent(id));
+    const state = await response.json();
+    if (!response.ok) throw new Error(state.error || 'lost voice session');
+    if (state.transcript) $('#q').value = state.transcript;
+    if (state.state === 'running' || state.state === 'stopping') {
+      setTimeout(() => pollVoice(id), 200);
+      return;
+    }
+    voiceId = null;
+    setListening(false);
+    if (state.state === 'error') return fail(state.error || 'voice capture failed');
+    if (!state.transcript) return fail('No speech was transcribed');
+    ask();
+  } catch (error) {
+    voiceId = null;
+    setListening(false);
+    fail(error.message || 'lost voice session');
+  }
+}
+
+function toggleVoice() {
+  if (voiceId) stopListening();
+  else startListening();
 }
 
 async function poll(job) {
@@ -306,7 +365,7 @@ function barChart(data) {
 }
 
 $('#go').onclick = ask;
-$('#voice').onclick = listen;
+$('#voice').onclick = toggleVoice;
 $('#q').addEventListener('keydown', e => { if (e.key === 'Enter') ask(); });
 loadExamples();
 </script>
