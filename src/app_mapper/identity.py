@@ -190,6 +190,16 @@ def _accessibility_summary(normalized: dict[str, Any]) -> dict[str, Any]:
 def _semantic_summary(
     observation_dir: Path, accessibility: dict[str, Any]
 ) -> dict[str, Any]:
+    hint_path = observation_dir / "semantic-hint.json"
+    if hint_path.is_file():
+        hint = _read_json(hint_path)
+        return {
+            "name": hint["name"],
+            "description": hint["description"],
+            "state_type": hint["state_type"],
+            "source": "deterministic",
+            "target_labels": [],
+        }
     interpretation_path = observation_dir / "interpretation.json"
     if interpretation_path.is_file():
         interpretation = _read_json(interpretation_path)
@@ -209,6 +219,13 @@ def _semantic_summary(
         state_type = "dialog"
     elif accessibility["expanded_menu_count"]:
         state_type = "menu"
+    elif any(
+        title
+        and "openvsp" not in title
+        and title != "vsp gl window"
+        for title in (window["title"].casefold() for window in accessibility["windows"])
+    ):
+        state_type = "manager"
     else:
         state_type = "workspace"
     titled_windows = [window["title"] for window in accessibility["windows"] if window["title"]]
@@ -224,6 +241,13 @@ def _semantic_summary(
             f"{accessibility['expanded_menu_titles'][0]} menu"
             if accessibility["expanded_menu_titles"]
             else "OpenVSP menu"
+        )
+    elif state_type == "manager":
+        name = next(
+            title
+            for title in titled_windows
+            if "openvsp" not in title.casefold()
+            and title.casefold() != "vsp gl window"
         )
     else:
         name = next(
@@ -319,6 +343,15 @@ def score_candidate(signals: dict[str, Any], node: NodeRecord) -> MatchCandidate
         and signals["semantic"]["state_type"] != node.state_type
     ):
         reasons.append("different semantic state type")
+    if (
+        signals["semantic"]["state_type"] == "manager"
+        and node.state_type == "manager"
+        and signals["semantic"]["source"] == "deterministic"
+        and node.semantic_source == "deterministic"
+        and _normalize_text(signals["semantic"]["name"])
+        != _normalize_text(node.semantic_name)
+    ):
+        reasons.append("different trusted manager navigation path")
     if reasons:
         return MatchCandidate(
             node_id=node.node_id,

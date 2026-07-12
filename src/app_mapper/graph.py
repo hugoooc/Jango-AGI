@@ -71,6 +71,7 @@ def _capture_identified_state(
     registry_root: Path,
     max_depth: int,
     max_elements: int,
+    semantic_hint: dict[str, str] | None = None,
 ) -> str:
     destination.mkdir(parents=True, exist_ok=False)
     write_json(
@@ -83,6 +84,8 @@ def _capture_identified_state(
         },
     )
     capture_interpretation_observation(pid, destination, max_depth, max_elements)
+    if semantic_hint is not None:
+        write_json(destination / "semantic-hint.json", semantic_hint)
     decision = identify_observation(destination, registry_root)
     if decision.review_required or decision.node_id is None:
         raise GraphError(
@@ -98,6 +101,7 @@ def capture_identified_state(
     registry_root: Path,
     max_depth: int,
     max_elements: int,
+    semantic_hint: dict[str, str] | None = None,
 ) -> str:
     return _capture_identified_state(
         pid,
@@ -106,6 +110,7 @@ def capture_identified_state(
         registry_root,
         max_depth,
         max_elements,
+        semantic_hint,
     )
 
 
@@ -399,6 +404,29 @@ def _actions() -> dict[str, EdgeAction]:
             expected_postconditions=["workspace source node restored"],
             reverse_action_key=f"open_menu_{slug}",
         )
+    from app_mapper.menu_inventory import SAFE_DIALOG_PATHS, safe_screen_action_keys
+
+    for path in SAFE_DIALOG_PATHS:
+        if path == ("OpenVSP", "About vsp"):
+            continue
+        open_key, close_key = safe_screen_action_keys(path)
+        label = " > ".join(path)
+        actions[open_key] = EdgeAction(
+            action_key=open_key,
+            semantic_description=f"Open {label}",
+            accessibility_locator={"role": "AXMenuItem", "menu_path": list(path), "action": "AXPress"},
+            preconditions=["verified workspace source", "exact approved menu path enabled"],
+            expected_postconditions=["approved manager/dialog destination verified"],
+            reverse_action_key=close_key,
+        )
+        actions[close_key] = EdgeAction(
+            action_key=close_key,
+            semantic_description=f"Close {label} without editing",
+            accessibility_locator={"menu_path": list(path), "action": "allowlisted dismissal"},
+            preconditions=["verified manager/dialog source"],
+            expected_postconditions=["workspace destination verified"],
+            reverse_action_key=open_key,
+        )
     return actions
 
 
@@ -551,6 +579,15 @@ def replay_edge(
         raise ReplayRefused(f"Action {edge.action.action_key!r} is not executable.")
     trusted_action = allowed_actions[edge.action.action_key]
 
+    def screen_hint() -> dict[str, str]:
+        menu_path = trusted_action.accessibility_locator["menu_path"]
+        label = " > ".join(menu_path)
+        return {
+            "name": f"{label} manager",
+            "description": f"OpenVSP screen opened through {label}",
+            "state_type": "manager",
+        }
+
     run = create_observation_directory(replay_root)
     result: dict[str, Any] = {
         "edge_id": edge.edge_id,
@@ -560,13 +597,18 @@ def replay_edge(
     }
     write_json(run / "replay.json", result)
     try:
-        source_id = _capture_identified_state(
+        source_args = (
             pid,
             diagnostics,
             run / "source",
             registry_root,
             max_depth,
             max_elements,
+        )
+        source_id = (
+            _capture_identified_state(*source_args, screen_hint())
+            if edge.action.action_key.startswith("dismiss_screen_")
+            else _capture_identified_state(*source_args)
         )
         result["observed_source_node_id"] = source_id
         result["expected_source_node_id"] = edge.source_node_id
@@ -593,15 +635,40 @@ def replay_edge(
             from app_mapper.discovery import _close_menu
 
             _close_menu(pid, str(trusted_action.accessibility_locator["title"]), timeout)
+        elif edge.action.action_key.startswith("open_screen_"):
+            from app_mapper.safe_expansion import open_safe_screen
+
+            open_safe_screen(
+                pid,
+                tuple(trusted_action.accessibility_locator["menu_path"]),
+                timeout,
+            )
+        elif edge.action.action_key.startswith("dismiss_screen_"):
+            from app_mapper.safe_expansion import dismiss_safe_screen_to_node
+
+            dismiss_safe_screen_to_node(
+                pid,
+                registry_root,
+                edge.destination_node_id,
+                timeout,
+            )
         result["action_performed"] = True
 
-        destination_id = _capture_identified_state(
+        semantic_hint = None
+        if edge.action.action_key.startswith("open_screen_"):
+            semantic_hint = screen_hint()
+        destination_args = (
             pid,
             diagnostics,
             run / "destination",
             registry_root,
             max_depth,
             max_elements,
+        )
+        destination_id = (
+            _capture_identified_state(*destination_args, semantic_hint)
+            if semantic_hint is not None
+            else _capture_identified_state(*destination_args)
         )
         result["observed_destination_node_id"] = destination_id
         result["expected_destination_node_id"] = edge.destination_node_id
@@ -636,6 +703,21 @@ def replay_edge(
                     timeout,
                 )
                 result["failure_cleanup"] = "menu canceled"
+            except Exception as cleanup_error:
+                result["failure_cleanup"] = f"failed: {cleanup_error}"
+        elif result["action_performed"] and edge.action.action_key.startswith(
+            "open_screen_"
+        ):
+            try:
+                from app_mapper.safe_expansion import dismiss_safe_screen_to_node
+
+                dismiss_safe_screen_to_node(
+                    pid,
+                    registry_root,
+                    edge.source_node_id,
+                    timeout,
+                )
+                result["failure_cleanup"] = "manager/dialog dismissed"
             except Exception as cleanup_error:
                 result["failure_cleanup"] = f"failed: {cleanup_error}"
         _update_replay(graph_root, registry_root, edge, success=False)

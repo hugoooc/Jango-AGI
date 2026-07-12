@@ -12,6 +12,7 @@ from app_mapper.models import (
     NodeObservation,
     NodeRecord,
 )
+from app_mapper.menu_inventory import safe_screen_action_keys
 
 
 def _write_node(registry: Path, node_id: str, state_type: str) -> None:
@@ -54,7 +55,7 @@ def _write_node(registry: Path, node_id: str, state_type: str) -> None:
 def _capture_sequence(monkeypatch, node_ids: list[str]):
     values = iter(node_ids)
 
-    def capture(_pid, _diagnostics, destination, _registry, _depth, _elements):
+    def capture(_pid, _diagnostics, destination, _registry, _depth, _elements, *_extra):
         destination.mkdir(parents=True, exist_ok=False)
         return next(values)
 
@@ -242,3 +243,43 @@ def test_replay_executes_only_trusted_menu_locator(monkeypatch, tmp_path: Path) 
 
     assert result["success"] is True
     assert calls == ["File"]
+
+
+def test_replay_executes_only_trusted_safe_screen_path(monkeypatch, tmp_path: Path) -> None:
+    graph_root = tmp_path / "graph"
+    edge_root = graph_root / "edges"
+    registry = tmp_path / "nodes"
+    replay_root = tmp_path / "replays"
+    edge_root.mkdir(parents=True)
+    source, destination = "node-workspace", "node-preferences"
+    _write_node(registry, source, "workspace")
+    _write_node(registry, destination, "manager")
+    action_key, reverse_key = safe_screen_action_keys(("File", "Preferences..."))
+    edge = GraphEdge(
+        edge_id="edge-preferences",
+        source_node_id=source,
+        destination_node_id=destination,
+        action=EdgeAction(
+            action_key=action_key,
+            semantic_description="tampered",
+            accessibility_locator={"menu_path": ["File", "Save..."]},
+            preconditions=[],
+            expected_postconditions=[],
+            reverse_action_key=reverse_key,
+        ),
+        evidence=[],
+    )
+    (edge_root / "edge-preferences.json").write_text(edge.model_dump_json(), encoding="utf-8")
+    _capture_sequence(monkeypatch, [source, destination])
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "app_mapper.safe_expansion.open_safe_screen",
+        lambda _pid, path, _timeout: calls.append(path),
+    )
+
+    result, _ = replay_edge(
+        "edge-preferences", 123, {}, graph_root, registry, replay_root, 1, 2, 20
+    )
+
+    assert result["success"] is True
+    assert calls == [("File", "Preferences...")]

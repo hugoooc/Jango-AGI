@@ -9,6 +9,7 @@ from typing import Any
 from app_mapper.artifacts import write_json
 from app_mapper.graph import graph_summary
 from app_mapper.identity import visual_similarity
+from app_mapper.menu_inventory import safe_screen_action_keys
 from app_mapper.models import NodeRecord
 
 
@@ -84,6 +85,7 @@ def build_viewer_data(
     discovery_root: Path,
     exploration_root: Path,
     validation_root: Path,
+    inventory_root: Path,
 ) -> dict[str, Any]:
     graph = graph_summary(graph_root, registry_root)
     records: list[NodeRecord] = []
@@ -117,6 +119,7 @@ def build_viewer_data(
     discovery = _latest(discovery_root, "discovery.json")
     exploration = _latest(exploration_root, "state.json")
     validation = _latest(validation_root, "validation.json")
+    inventory = _latest(inventory_root, "inventory.json")
     rejected = []
     if discovery:
         rejected = [
@@ -148,6 +151,29 @@ def build_viewer_data(
         else []
     )
     explored_approved = [c for c in approved if c.get("status") == "succeeded"]
+    inventory_controls = inventory.get("controls", []) if inventory else []
+    edge_action_keys = {edge["action"]["action_key"] for edge in edges}
+    for control in inventory_controls:
+        path = tuple(control.get("path", []))
+        control["mapped"] = (
+            path == ("OpenVSP", "About vsp")
+            or (bool(path) and safe_screen_action_keys(path)[0] in edge_action_keys)
+        )
+    approved_frontier = [
+        control
+        for control in inventory_controls
+        if control.get("policy_decision") == "approved" and not control["mapped"]
+    ]
+    mapped_screens = [
+        control
+        for control in inventory_controls
+        if control.get("policy_decision") == "approved" and control["mapped"]
+    ]
+    blocked_frontier = [
+        control
+        for control in inventory_controls
+        if control.get("policy_decision") in {"review_required", "rejected"}
+    ]
     return {
         "generated_at": _now(),
         "nodes": nodes,
@@ -157,6 +183,10 @@ def build_viewer_data(
         "failed_validations": failed_validations,
         "rejected_controls": rejected,
         "unexplored_controls": unexplored,
+        "approved_frontier": approved_frontier,
+        "mapped_screens": mapped_screens,
+        "blocked_frontier": blocked_frontier,
+        "latest_inventory": inventory,
         "latest_validation": validation,
         "metrics": {
             "mapped_nodes": len(nodes),
@@ -172,6 +202,13 @@ def build_viewer_data(
             "control_coverage": (
                 round(len(explored_approved) / len(approved), 6) if approved else None
             ),
+            "safe_frontier_mapped": len(mapped_screens),
+            "safe_frontier_total": len(mapped_screens) + len(approved_frontier),
+            "safe_frontier_coverage": (
+                round(len(mapped_screens) / (len(mapped_screens) + len(approved_frontier)), 6)
+                if mapped_screens or approved_frontier
+                else None
+            ),
         },
     }
 
@@ -183,10 +220,16 @@ def generate_viewer(
     discovery_root: Path,
     exploration_root: Path,
     validation_root: Path,
+    inventory_root: Path,
 ) -> Path:
     output_root.mkdir(parents=True, exist_ok=True)
     data = build_viewer_data(
-        graph_root, registry_root, discovery_root, exploration_root, validation_root
+        graph_root,
+        registry_root,
+        discovery_root,
+        exploration_root,
+        validation_root,
+        inventory_root,
     )
     write_json(output_root / "viewer-data.json", data)
     encoded = json.dumps(data, separators=(",", ":")).replace("<", "\\u003c")
@@ -209,7 +252,7 @@ _HTML = """<!doctype html>
 const D=JSON.parse(document.getElementById('data').textContent),$=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 $('#generated').textContent='Generated '+new Date(D.generated_at).toLocaleString();
 const fmt=v=>v==null?'—':typeof v==='number'&&v<=1?(v*100).toFixed(0)+'%':v;
-const metricLabels={mapped_nodes:'Mapped states',directed_edges:'Directed edges',replay_reliability:'Replay reliability',replay_attempts:'Replay attempts',control_coverage:'Control coverage',recorded_edges:'Evidence-backed edges'};
+const metricLabels={mapped_nodes:'Mapped states',directed_edges:'Directed edges',replay_reliability:'Replay reliability',replay_attempts:'Replay attempts',safe_frontier_coverage:'Safe frontier mapped',recorded_edges:'Evidence-backed edges'};
 $('#metrics').innerHTML=Object.entries(metricLabels).map(([k,l])=>`<div class="metric"><span class="muted">${l}</span><strong>${fmt(D.metrics[k])}</strong></div>`).join('');
 const svg=$('#graph'),NS='http://www.w3.org/2000/svg';svg.innerHTML='<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#718394"/></marker></defs>';
 const center=D.nodes.find(n=>n.state_type==='workspace')||D.nodes[0],others=D.nodes.filter(n=>n!==center),pos={};if(center)pos[center.node_id]=[450,285];others.forEach((n,i)=>{const a=(Math.PI*2*i/Math.max(others.length,1))-Math.PI/2;pos[n.node_id]=[450+315*Math.cos(a),285+215*Math.sin(a)]});
@@ -218,7 +261,7 @@ D.edges.forEach(e=>{const a=pos[e.source_node_id],b=pos[e.destination_node_id];i
 D.nodes.forEach(n=>{const [x,y]=pos[n.node_id],g=el('g',{class:'node '+n.state_type,transform:`translate(${x} ${y})`});g.appendChild(el('circle',{r:43}));const label=el('text',{y:-2});label.textContent=n.semantic_name.length>19?n.semantic_name.slice(0,18)+'…':n.semantic_name;g.appendChild(label);const type=el('text',{y:15});type.textContent=n.state_type;type.setAttribute('fill','#98a9b9');g.appendChild(type);g.onclick=()=>showNode(n);svg.appendChild(g)});
 function showNode(n){$('#detail').innerHTML=`<h2>${esc(n.semantic_name)}</h2><span class="badge">${esc(n.state_type)}</span>${n.screenshot_data_uri?`<img src="${n.screenshot_data_uri}" alt="Screenshot of ${esc(n.semantic_name)}">`:'<p class="empty">Screenshot unavailable</p>'}<p>${esc(n.semantic_description)}</p><dl><dt>Node ID</dt><dd>${esc(n.node_id)}</dd><dt>Semantic source</dt><dd>${esc(n.semantic_source)}</dd><dt>Observations</dt><dd>${n.observation_count}</dd><dt>First seen</dt><dd>${esc(n.first_seen)}</dd><dt>Last seen</dt><dd>${esc(n.last_seen)}</dd><dt>Controls</dt><dd>${esc(JSON.stringify(n.interactive_control_summary))}</dd></dl>`}
 function showEdge(e){const rate=e.success_rate==null?'not tested':fmt(e.success_rate);$('#detail').innerHTML=`<h2>${esc(e.action.semantic_description)}</h2><span class="badge">${esc(e.action.risk)}</span> <span class="badge">confidence: ${esc(e.confidence)}</span><dl><dt>Edge ID</dt><dd>${esc(e.edge_id)}</dd><dt>Direction</dt><dd>${esc(e.source_node_id)} → ${esc(e.destination_node_id)}</dd><dt>Mechanism</dt><dd>${esc(e.action.mechanism)}</dd><dt>Replay</dt><dd class="${e.replay.failures?'bad-text':'good'}">${e.replay.successes}/${e.replay.attempts} (${rate})</dd><dt>Evidence runs</dt><dd>${e.evidence.length}</dd><dt>Reverse action</dt><dd>${esc(e.action.reverse_action_key)}</dd></dl><h3>Locator</h3><pre>${esc(JSON.stringify(e.action.accessibility_locator,null,2))}</pre><h3>Preconditions</h3><pre>${esc(e.action.preconditions.join('\\n'))}</pre><h3>Expected result</h3><pre>${esc(e.action.expected_postconditions.join('\\n'))}</pre>`}
-const blocks=[['Duplicate-node candidates',D.duplicate_candidates,x=>`${esc(x.left)} ↔ ${esc(x.right)} · ${(x.score*100).toFixed(0)}%<br><span class="muted">${esc(x.reasons.join(', '))}</span>`],['Failed transitions / validation', [...D.failed_edges,...D.failed_validations],x=>`${esc(x.edge_id||x.action?.action_key)} <span class="bad-text">${esc(x.status||((x.replay?.failures||0)+' failures'))}</span><br><span class="muted">${esc(x.error||'Inspect replay statistics')}</span>`],['Rejected controls',D.rejected_controls,x=>`${esc(x.label)} <span class="badge">${esc(x.classification)}</span><br><span class="muted">${esc((x.policy_reasons||[]).join('; '))}</span>`],['Unexplored controls',D.unexplored_controls,x=>`${esc(x.target)} <span class="warn">${esc(x.status)}</span><br><span class="muted">${esc(x.error||'Not yet explored')}</span>`]];
+const blocks=[['Mapped approved screens',D.mapped_screens,x=>`${esc(x.path.join(' → '))} <span class="good">mapped</span>`],['Approved expansion frontier',D.approved_frontier,x=>`${esc(x.path.join(' → '))} <span class="good">approved</span><br><span class="muted">${esc(x.policy_reasons.join('; '))}</span>`],['Blocked / review frontier',D.blocked_frontier,x=>`${esc(x.path.join(' → '))} <span class="badge">${esc(x.classification)}</span><br><span class="muted">${esc(x.policy_decision)} — ${esc(x.policy_reasons.join('; '))}</span>`],['Duplicate-node candidates',D.duplicate_candidates,x=>`${esc(x.left)} ↔ ${esc(x.right)} · ${(x.score*100).toFixed(0)}%<br><span class="muted">${esc(x.reasons.join(', '))}</span>`],['Failed transitions / validation', [...D.failed_edges,...D.failed_validations],x=>`${esc(x.edge_id||x.action?.action_key)} <span class="bad-text">${esc(x.status||((x.replay?.failures||0)+' failures'))}</span><br><span class="muted">${esc(x.error||'Inspect replay statistics')}</span>`],['Rejected controls',D.rejected_controls,x=>`${esc(x.label)} <span class="badge">${esc(x.classification)}</span><br><span class="muted">${esc((x.policy_reasons||[]).join('; '))}</span>`],['Unexplored controls',D.unexplored_controls,x=>`${esc(x.target)} <span class="warn">${esc(x.status)}</span><br><span class="muted">${esc(x.error||'Not yet explored')}</span>`]];
 $('#lists').innerHTML=blocks.map(([title,items,render])=>`<div class="panel"><h2>${title} <span class="muted">(${items.length})</span></h2>${items.length?items.map(x=>`<div class="item">${render(x)}</div>`).join(''):'<p class="empty">None</p>'}</div>`).join('');
 if(center)showNode(center);
 </script></body></html>"""

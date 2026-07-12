@@ -94,6 +94,7 @@ def test_viewer_embeds_graph_metadata_and_screenshots(tmp_path: Path) -> None:
         tmp_path / "discovery",
         tmp_path / "explorations",
         tmp_path / "validations",
+        tmp_path / "inventories",
     )
     destination = generate_viewer(
         tmp_path / "viewer",
@@ -102,6 +103,7 @@ def test_viewer_embeds_graph_metadata_and_screenshots(tmp_path: Path) -> None:
         tmp_path / "discovery",
         tmp_path / "explorations",
         tmp_path / "validations",
+        tmp_path / "inventories",
     )
 
     assert data["metrics"]["mapped_nodes"] == 2

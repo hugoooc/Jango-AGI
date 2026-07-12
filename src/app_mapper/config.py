@@ -27,5 +27,7 @@ DEFAULT_DISCOVERY_ROOT = Path("artifacts/discovery-runs")
 DEFAULT_EXPLORATION_ROOT = Path("artifacts/explorations")
 DEFAULT_VALIDATION_ROOT = Path("artifacts/validations")
 DEFAULT_VIEWER_ROOT = Path("artifacts/viewer")
+DEFAULT_INVENTORY_ROOT = Path("artifacts/menu-inventories")
+DEFAULT_EXPANSION_ROOT = Path("artifacts/safe-expansions")
 DEFAULT_AX_MAX_DEPTH = 12
 DEFAULT_AX_MAX_ELEMENTS = 5_000

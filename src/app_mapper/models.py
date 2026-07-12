@@ -296,3 +296,64 @@ class ValidationRecord(StrictModel):
     results: list[ValidationEdgeResult] = Field(default_factory=list)
     summary: dict[str, int | float] = Field(default_factory=dict)
     success: bool = False
+
+
+class MenuControl(StrictModel):
+    control_id: str
+    path: list[str] = Field(min_length=2)
+    top_level_menu: str
+    title: str
+    enabled: bool
+    identifier: str | None = None
+    has_submenu: bool = False
+    classification: Literal[
+        "safe_dialog",
+        "submenu",
+        "view_state_change",
+        "model_modifying",
+        "file_operation",
+        "analysis_workflow",
+        "external_or_system",
+        "destructive",
+        "unknown",
+    ]
+    policy_decision: Literal["approved", "review_required", "rejected", "not_applicable"]
+    policy_reasons: list[str]
+
+
+class MenuInventory(StrictModel):
+    schema_version: Literal[1] = 1
+    captured_at: str
+    app: Literal["OpenVSP"] = "OpenVSP"
+    app_version: str | None = None
+    read_only: Literal[True] = True
+    actions_executed: Literal[0] = 0
+    source_path: str
+    truncated: bool
+    controls: list[MenuControl]
+    summary: dict[str, int]
+
+
+class SafeExpansionCandidate(StrictModel):
+    control_id: str
+    path: list[str]
+    status: Literal["proposed", "already_mapped", "succeeded", "failed", "skipped"]
+    source_node_id: str | None = None
+    destination_node_id: str | None = None
+    edge_ids: list[str] = Field(default_factory=list)
+    return_verified: bool = False
+    trace_path: str | None = None
+    error: str | None = None
+
+
+class SafeExpansionRecord(StrictModel):
+    schema_version: Literal[1] = 1
+    started_at: str
+    completed_at: str | None = None
+    mode: Literal["plan", "execute"]
+    inventory_path: str
+    max_candidates: int = Field(ge=1)
+    candidates: list[SafeExpansionCandidate]
+    actions_executed: int = Field(default=0, ge=0)
+    summary: dict[str, int] = Field(default_factory=dict)
+    success: bool = False

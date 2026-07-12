@@ -13,10 +13,12 @@ from app_mapper.config import (
     DEFAULT_AX_MAX_DEPTH,
     DEFAULT_AX_MAX_ELEMENTS,
     DEFAULT_DISCOVERY_ROOT,
+    DEFAULT_EXPANSION_ROOT,
     DEFAULT_GRAPH_ROOT,
     DEFAULT_GRAPH_RUN_ROOT,
     DEFAULT_EXPLORATION_ROOT,
     DEFAULT_INTERPRETATION_ARTIFACT_ROOT,
+    DEFAULT_INVENTORY_ROOT,
     DEFAULT_NODE_OBSERVATION_ROOT,
     DEFAULT_NODE_REGISTRY_ROOT,
     DEFAULT_REPLAY_ROOT,
@@ -41,6 +43,8 @@ from app_mapper.holo import (
     request_interpretation,
 )
 from app_mapper.interpretation import capture_interpretation_observation, validate_and_filter
+from app_mapper.menu_inventory import capture_menu_inventory
+from app_mapper.safe_expansion import expand_safe_frontier, latest_inventory
 from app_mapper.macos.accessibility import read_application_tree
 from app_mapper.macos.applications import (
     choose_primary_window,
@@ -465,6 +469,7 @@ def run_graph_viewer(
     discovery_root: Path,
     exploration_root: Path,
     validation_root: Path,
+    inventory_root: Path,
 ) -> int:
     try:
         destination = generate_viewer(
@@ -474,6 +479,7 @@ def run_graph_viewer(
             discovery_root,
             exploration_root,
             validation_root,
+            inventory_root,
         )
     except Exception as exc:
         print(f"Viewer generation failed: {type(exc).__name__}: {exc}")
@@ -481,6 +487,113 @@ def run_graph_viewer(
     print(f"Graph viewer: {destination.resolve()}")
     print("Open that HTML file in a browser; it is self-contained and performs no UI actions.")
     return 0
+
+
+def run_menu_inventory(
+    output_root: Path, max_depth: int, max_elements: int
+) -> int:
+    diagnostics = collect_diagnostics()
+    errors: list[str] = []
+    if not diagnostics["target"]["installed"]:
+        errors.append("OpenVSP is not installed.")
+    if not diagnostics["running"]:
+        errors.append("OpenVSP is not running.")
+    if not diagnostics["permissions"]["accessibility"]["granted"]:
+        errors.append("Accessibility permission is required.")
+    if errors:
+        print("Menu inventory stopped before capture.")
+        for error in errors:
+            print(f"- {error}")
+        return 2
+    try:
+        inventory, run = capture_menu_inventory(
+            int(diagnostics["processes"][0]["pid"]),
+            diagnostics,
+            output_root,
+            max_depth,
+            max_elements,
+        )
+    except Exception as exc:
+        print(f"Menu inventory failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Menu inventory: {run}")
+    print(f"Controls found: {inventory.summary['total']}")
+    print(
+        "Policy: "
+        f"approved={inventory.summary['approved']}, "
+        f"review_required={inventory.summary['review_required']}, "
+        f"rejected={inventory.summary['rejected']}, "
+        f"containers={inventory.summary['not_applicable']}"
+    )
+    print("Approved next frontier:")
+    for control in inventory.controls:
+        if control.policy_decision == "approved":
+            print(f"- {' > '.join(control.path)}")
+    print("Actions executed: 0 (read-only)")
+    return 0 if not inventory.truncated else 4
+
+
+def run_safe_expansion(
+    execute: bool,
+    inventory_path: Path | None,
+    inventory_root: Path,
+    run_root: Path,
+    graph_root: Path,
+    registry_root: Path,
+    max_candidates: int,
+    timeout: float,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    selected_inventory = inventory_path or latest_inventory(inventory_root)
+    if selected_inventory is None or not selected_inventory.is_file():
+        print("No menu inventory found. Run `uv run python -m app_mapper inventory-menus` first.")
+        return 2
+    diagnostics = collect_diagnostics()
+    if execute:
+        errors = _identity_preflight(diagnostics)
+        if diagnostics["running"] and not list_windows(int(diagnostics["processes"][0]["pid"])):
+            errors.append("OpenVSP has no visible windows.")
+        if errors:
+            print("Safe expansion stopped before interaction.")
+            for error in errors:
+                print(f"- {error}")
+            return 2
+        pid = int(diagnostics["processes"][0]["pid"])
+    else:
+        pid = 0
+    try:
+        record, run = expand_safe_frontier(
+            pid,
+            diagnostics,
+            selected_inventory,
+            run_root,
+            graph_root,
+            registry_root,
+            execute=execute,
+            max_candidates=max_candidates,
+            timeout=timeout,
+            max_depth=max_depth,
+            max_elements=max_elements,
+        )
+    except Exception as exc:
+        print(f"Safe expansion failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Safe expansion artifacts: {run}")
+    print(f"Mode: {record.mode}")
+    for candidate in record.candidates:
+        if candidate.status != "skipped":
+            print(f"- {' > '.join(candidate.path)} | {candidate.status}")
+            if candidate.error:
+                print(f"  {candidate.error}")
+    print(
+        "Summary: "
+        + ", ".join(f"{key}={value}" for key, value in record.summary.items())
+    )
+    print(f"Actions executed: {record.actions_executed}")
+    if not execute:
+        print("Plan only: rerun with --execute after reviewing the candidates.")
+    return 0 if record.success else 4
 
 
 def run_validation(
@@ -827,6 +940,30 @@ def build_parser() -> argparse.ArgumentParser:
     graph_viewer.add_argument("--discovery-root", type=Path, default=DEFAULT_DISCOVERY_ROOT)
     graph_viewer.add_argument("--exploration-root", type=Path, default=DEFAULT_EXPLORATION_ROOT)
     graph_viewer.add_argument("--validation-root", type=Path, default=DEFAULT_VALIDATION_ROOT)
+    graph_viewer.add_argument("--inventory-root", type=Path, default=DEFAULT_INVENTORY_ROOT)
+
+    inventory_parser = subparsers.add_parser(
+        "inventory-menus",
+        help="Read and classify the exposed OpenVSP menu tree without clicking.",
+    )
+    inventory_parser.add_argument("--output-root", type=Path, default=DEFAULT_INVENTORY_ROOT)
+    inventory_parser.add_argument("--max-depth", type=int, default=8)
+    inventory_parser.add_argument("--max-elements", type=int, default=2_000)
+
+    expansion_parser = subparsers.add_parser(
+        "expand-safe",
+        help="Open, capture, and safely close approved inventory screens.",
+    )
+    expansion_parser.add_argument("--execute", action="store_true")
+    expansion_parser.add_argument("--inventory", type=Path)
+    expansion_parser.add_argument("--inventory-root", type=Path, default=DEFAULT_INVENTORY_ROOT)
+    expansion_parser.add_argument("--run-root", type=Path, default=DEFAULT_EXPANSION_ROOT)
+    expansion_parser.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    expansion_parser.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
+    expansion_parser.add_argument("--max-candidates", type=int, default=3)
+    expansion_parser.add_argument("--timeout", type=float, default=8.0)
+    expansion_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    expansion_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
 
     replay_parser = subparsers.add_parser("replay", help="Replay one recorded safe graph edge.")
     replay_parser.add_argument("edge_id")
@@ -959,6 +1096,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.discovery_root,
                 args.exploration_root,
                 args.validation_root,
+                args.inventory_root,
             )
         if args.timeout <= 0:
             parser.error("--timeout must be positive")
@@ -999,6 +1137,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.sample_size,
             args.seed,
             args.edge_ids,
+            args.timeout,
+            args.max_depth,
+            args.max_elements,
+        )
+    if args.command == "inventory-menus":
+        if args.max_depth < 2 or args.max_elements < 1:
+            parser.error("--max-depth must be at least 2 and --max-elements must be positive")
+        return run_menu_inventory(args.output_root, args.max_depth, args.max_elements)
+    if args.command == "expand-safe":
+        if args.max_candidates < 1:
+            parser.error("--max-candidates must be positive")
+        if args.timeout <= 0 or args.max_depth < 0 or args.max_elements < 1:
+            parser.error("timeout/elements must be positive and AX depth non-negative")
+        return run_safe_expansion(
+            args.execute,
+            args.inventory,
+            args.inventory_root,
+            args.run_root,
+            args.graph_root,
+            args.registry_root,
+            args.max_candidates,
             args.timeout,
             args.max_depth,
             args.max_elements,

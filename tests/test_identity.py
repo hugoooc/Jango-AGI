@@ -220,3 +220,32 @@ def test_expanded_menu_is_distinct_and_cancel_returns_to_workspace(tmp_path: Pat
     assert view_node["semantic_name"] == "view menu"
     assert returned_decision.status == "matched"
     assert returned_decision.node_id == workspace_decision.node_id
+
+
+def test_trusted_manager_paths_keep_structurally_similar_screens_distinct(
+    tmp_path: Path,
+) -> None:
+    first = _write_observation(tmp_path, "state1")
+    second = _write_observation(tmp_path, "state2")
+    for observation, name in (
+        (first, "Window > Background... manager"),
+        (second, "View > Adjust... manager"),
+    ):
+        (observation / "semantic-hint.json").write_text(
+            json.dumps(
+                {
+                    "name": name,
+                    "description": f"Trusted {name}",
+                    "state_type": "manager",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    first_decision = identify_observation(first, tmp_path / "nodes")
+    second_decision = identify_observation(second, tmp_path / "nodes")
+
+    assert first_decision.status == "new"
+    assert second_decision.status == "new"
+    assert second_decision.node_id != first_decision.node_id
+    assert "different trusted manager navigation path" in second_decision.candidates[0].reasons

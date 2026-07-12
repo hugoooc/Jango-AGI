@@ -211,6 +211,64 @@ def find_menu_item(pid: int, allowed_titles: tuple[str, ...]) -> tuple[Any, dict
     return find_descendant(menu_bar, is_allowed)
 
 
+def find_menu_item_path(
+    pid: int, path: tuple[str, ...]
+) -> tuple[Any, dict[str, Any]] | None:
+    """Find an exact menu item under an exact top-level menu and submenu path."""
+    if len(path) < 2:
+        return None
+    application = ApplicationServices.AXUIElementCreateApplication(pid)
+    menu_bar = attribute_value(application, ApplicationServices.kAXMenuBarAttribute)
+    if menu_bar is None:
+        return None
+
+    top = next(
+        (
+            item
+            for item in attribute_value(menu_bar, ApplicationServices.kAXChildrenAttribute) or []
+            if element_summary(item).get(str(ApplicationServices.kAXRoleAttribute))
+            == ApplicationServices.kAXMenuBarItemRole
+            and element_summary(item).get(str(ApplicationServices.kAXTitleAttribute)) == path[0]
+        ),
+        None,
+    )
+    if top is None:
+        return None
+
+    def direct_items(root: Any) -> list[Any]:
+        items: list[Any] = []
+        pending = list(attribute_value(root, ApplicationServices.kAXChildrenAttribute) or [])
+        while pending:
+            element = pending.pop(0)
+            summary = element_summary(element)
+            if summary.get(str(ApplicationServices.kAXRoleAttribute)) == ApplicationServices.kAXMenuItemRole:
+                items.append(element)
+            else:
+                pending[0:0] = list(
+                    attribute_value(element, ApplicationServices.kAXChildrenAttribute) or []
+                )
+        return items
+
+    current = top
+    for expected_title in path[1:]:
+        match = next(
+            (
+                item
+                for item in direct_items(current)
+                if element_summary(item).get(str(ApplicationServices.kAXTitleAttribute))
+                == expected_title
+            ),
+            None,
+        )
+        if match is None:
+            return None
+        current = match
+    summary = element_summary(current)
+    if summary.get(str(ApplicationServices.kAXEnabledAttribute), True) is not True:
+        return None
+    return current, summary
+
+
 def application_windows(pid: int) -> list[tuple[Any, dict[str, Any]]]:
     application = ApplicationServices.AXUIElementCreateApplication(pid)
     windows = attribute_value(application, ApplicationServices.kAXWindowsAttribute) or []

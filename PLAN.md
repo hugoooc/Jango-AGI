@@ -545,6 +545,67 @@ Make the graph easy to inspect and measure its replay reliability.
 
 `Implemented — awaiting manual validation`
 
+## Milestone 9 — Read-Only Expansion Inventory
+
+### Goal
+
+Identify a broad, reviewable frontier of OpenVSP commands before deeper exploration executes any of them.
+
+### Scope
+
+- Read the complete exposed OpenVSP menu hierarchy through Accessibility.
+- Preserve nested menu paths, enabled state, and stable identifiers.
+- Exclude the macOS Apple menu and dynamic system controls.
+- Classify file operations, destructive actions, model edits, analysis workflows, viewport changes, submenus, and safe dialog/manager candidates.
+- Approve only exact human-reviewed commands for a later open-observe-close experiment.
+- Execute no UI action during inventory.
+- Show the approved and blocked expansion frontiers in the graph viewer.
+
+### Acceptance gate
+
+- The inventory captures the eight OpenVSP top-level menus and their nested commands without clicking.
+- File, exit, direct model-editing, and external actions are rejected.
+- Analysis and unproven viewport actions require review.
+- Approved entries are limited to dialogs/managers that can be tested with a close-and-return guard.
+- The output reports `Actions executed: 0` and OpenVSP remains unchanged.
+
+### Status
+
+`Implemented — awaiting manual validation`
+
+## Milestone 10 — Guarded Safe-Screen Expansion
+
+### Goal
+
+Turn approved Milestone 9 controls into real graph nodes and reversible edges.
+
+### Scope
+
+- Consume only exact `approved` inventory paths.
+- Skip screens whose forward action is already mapped.
+- Support plan-only review before execution.
+- Bound each run by candidate count.
+- Verify the workspace source before every candidate.
+- Require one new OpenVSP window and an allowlisted dismissal action.
+- Attach trusted semantic metadata for untitled FLTK managers.
+- Capture source, destination, and returned observations.
+- Commit edges only after the original workspace is restored.
+- Stop when recovery is ambiguous; never guess among multiple extra windows.
+- Extend replay through a static exact-path action registry.
+
+### Acceptance gate
+
+- A small three-screen run creates distinct manager nodes and edge pairs.
+- Every successful candidate has `return_verified: true`.
+- Failed candidates preserve evidence and do not commit edges.
+- Reruns skip already mapped actions.
+- The viewer reports mapped versus remaining approved frontier coverage.
+- OpenVSP remains on the unchanged blank workspace.
+
+### Status
+
+`Implemented — awaiting manual validation`
+
 ## Likely Technical Stack
 
 - Python 3.12.
@@ -686,7 +747,9 @@ These should be answered through experiments instead of assumed upfront:
 | 6 | Whitelisted one-hop discovery | Implemented — manually validated |
 | 7 | Bounded autonomous exploration | Implemented — manually validated |
 | 8 | Graph viewer and validation | Implemented — awaiting manual validation |
+| 9 | Read-only expansion inventory | Implemented — awaiting manual validation |
+| 10 | Guarded safe-screen expansion | Implemented — awaiting manual validation |
 
 ## Immediate Next Step
 
-Run the Milestone 8 five-edge validation sample, inspect the self-contained viewer, and confirm OpenVSP returns to the unchanged blank workspace.
+Run the Milestone 10 three-screen guarded expansion test and inspect its return verification before scaling across the remaining approved frontier.

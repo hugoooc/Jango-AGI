@@ -2,7 +2,7 @@
 
 An incremental Python prototype for observing and mapping the OpenVSP user interface on macOS.
 
-The project implements Milestones 1–8 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, graph edges, whitelisted discovery, bounded resumable exploration, graph inspection, and replay validation. It does not modify or save an OpenVSP model.
+The project implements Milestones 1–10 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, graph validation, read-only expansion inventory, and guarded safe-screen expansion. It does not modify or save an OpenVSP model.
 
 ## Development commands
 
@@ -15,6 +15,8 @@ uv run python -m app_mapper interpret
 uv run python -m app_mapper capture-node
 uv run python -m app_mapper graph show
 uv run python -m app_mapper graph viewer
+uv run python -m app_mapper inventory-menus
+uv run python -m app_mapper expand-safe --max-candidates 3
 uv run python -m app_mapper validate --sample-size 5
 uv run python -m app_mapper discover-one-hop
 uv run python -m app_mapper explore --max-depth 1 --max-nodes 10 --max-actions 18
@@ -219,3 +221,56 @@ uv run python -m app_mapper validate --edge edge-cdd72807684a
 ```
 
 Validation performs only recorded `safe_navigation`, reversible actions. It does not select commands inside menus or modify the model. Confirm the command finishes back at `Unnamed.vsp3` with no geometry present, then regenerate the viewer so its reliability metrics include the new attempts.
+
+## Milestone 9 read-only expansion inventory
+
+Start from OpenVSP's blank workspace and run:
+
+```bash
+uv run python -m app_mapper inventory-menus
+```
+
+The command reads the full Accessibility menu hierarchy without opening a menu or clicking a command. On OpenVSP 3.51.0 the current baseline is approximately 87 controls: 20 approved dialog/manager candidates, 37 requiring review, 27 rejected, and 3 submenu containers. The exact count can vary slightly with enabled state or application version, but the output must end with `Actions executed: 0 (read-only)`.
+
+Open the printed `inventory.json` and check these safety examples:
+
+- `Model > Set Editor...` is `safe_dialog | approved`.
+- `Model > Geometry...` requires review because it raises an existing workspace window rather than creating a reversible destination.
+- `Analysis > CompGeom...` is `analysis_workflow | review_required`.
+- `File > Save...` is `file_operation | rejected`.
+- `Edit > Delete` is `model_modifying | rejected`.
+- `OpenVSP > Quit vsp` is `destructive | rejected`.
+
+Then regenerate and open the viewer:
+
+```bash
+uv run python -m app_mapper graph viewer
+open artifacts/viewer/index.html
+```
+
+Its lower panels now show the approved expansion frontier separately from blocked and review-required controls. Confirm OpenVSP remains on the unchanged `Unnamed.vsp3` workspace. This inventory is the review gate for the next milestone; it does not add graph nodes yet.
+
+## Milestone 10 guarded safe-screen expansion
+
+Review the next three unmapped candidates without clicking:
+
+```bash
+uv run python -m app_mapper expand-safe --max-candidates 3
+```
+
+Then start from the blank workspace with no open dialog and execute only that small batch:
+
+```bash
+uv run python -m app_mapper expand-safe --execute --max-candidates 3
+```
+
+For each candidate, watch one manager/dialog open and close without any field or inner button being used. Successful entries must report `succeeded`; the summary must contain `failed=0`; and actions should equal twice the number of successful new screens. Inspect `expansion.json` and confirm every success has a destination node, two edge IDs, and `return_verified: true`.
+
+Run `uv run python -m app_mapper graph show`. Each successful distinct screen adds one node and two directed edges. Regenerate the viewer to see mapped approved screens, remaining frontier, and the safe-frontier coverage percentage:
+
+```bash
+uv run python -m app_mapper graph viewer
+open artifacts/viewer/index.html
+```
+
+Do not run the full frontier until the three-screen batch is confirmed. A rerun automatically skips correctly mapped screens. Any ambiguous recovery stops instead of guessing which window to close.
