@@ -8,7 +8,8 @@ class FleetTests(unittest.TestCase):
     def test_wing_span_is_gui_only_vision_trajectory(self):
         actions = fleet.wing_span_actions(12.5)
         self.assertEqual(actions[0]["type"], "vision_click")
-        self.assertEqual(actions[-3], {"type": "type", "text": "12.5"})
+        self.assertEqual(actions[-4], {"type": "type", "text": "12.5"})
+        self.assertEqual(actions[-1]["type"], "vision_assert")
         self.assertNotIn("openvsp", repr(actions).lower())
 
     @mock.patch.object(fleet, "_healthy", return_value=True)

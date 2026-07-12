@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -72,6 +73,31 @@ def _api_key() -> str:
     return key_value
 
 
+def _holo(payload: dict, attempts: int = 4) -> dict:
+    """Call Holo with bounded retry for parallel-worker rate limiting."""
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        request = urllib.request.Request(
+            f"{HOLO_BASE}/chat/completions",
+            data=json.dumps(payload).encode(),
+            headers={"Authorization": f"Bearer {_api_key()}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code != 429 or attempt == attempts - 1:
+                raise RuntimeError(f"Holo returned HTTP {exc.code}") from exc
+        except (OSError, urllib.error.URLError) as exc:
+            last_error = exc
+            if attempt == attempts - 1:
+                break
+        time.sleep(1.5 * (2 ** attempt))
+    raise RuntimeError(f"Holo request failed: {last_error}")
+
+
 def locate(description: str) -> tuple[int, int]:
     """Ground a textual target against the current screenshot with Holo."""
     png = screenshot()
@@ -90,17 +116,7 @@ def locate(description: str) -> tuple[int, int]:
         "temperature": 0.0,
         "max_tokens": 900,
     }
-    request = urllib.request.Request(
-        f"{HOLO_BASE}/chat/completions",
-        data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {_api_key()}", "Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            result = json.loads(response.read())
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Holo returned HTTP {exc.code}") from exc
+    result = _holo(payload)
     message = result["choices"][0]["message"]
     blob = (message.get("content") or "") + "\n" + (message.get("reasoning") or "")
     match = _COORD_RE.search(blob)
@@ -109,6 +125,36 @@ def locate(description: str) -> tuple[int, int]:
     normalized_x, normalized_y = int(match.group(1)), int(match.group(2))
     width, height = screen_size()
     return round(normalized_x / 1000 * width), round(normalized_y / 1000 * height)
+
+
+def assert_visual(assertion: str) -> dict:
+    """Require screenshot evidence before a GUI trajectory may report success."""
+    image_url = "data:image/png;base64," + base64.b64encode(screenshot()).decode()
+    payload = {
+        "model": HOLO_MODEL,
+        "messages": [{"role": "user", "content": [
+            {"type": "text", "text": (
+                "Inspect this OpenVSP screenshot and test the following assertion: "
+                f"{assertion}. Return ONLY JSON as "
+                '{"ok": true or false, "observed": "brief visual evidence"}.'
+            )},
+            {"type": "image_url", "image_url": {"url": image_url}},
+        ]}],
+        "temperature": 0.0,
+        "max_tokens": 900,
+    }
+    message = _holo(payload)["choices"][0]["message"]
+    blob = (message.get("content") or "").strip()
+    try:
+        result = json.loads(blob)
+    except json.JSONDecodeError:
+        match = re.search(r'\{[^{}]*"ok"[^{}]*\}', blob, re.S)
+        if not match:
+            raise RuntimeError(f"Holo did not return verification JSON: {blob!r}")
+        result = json.loads(match.group(0))
+    if result.get("ok") is not True:
+        raise RuntimeError(f"visual verification failed: {result.get('observed', 'no evidence')}")
+    return result
 
 
 def execute(action: dict) -> dict:
@@ -124,6 +170,9 @@ def execute(action: dict) -> dict:
         x, y = locate(str(action["target"]))
         click(x, y, double=bool(action.get("double")))
         return {"type": kind, "target": action["target"], "x": x, "y": y}
+    if kind == "vision_assert":
+        result = assert_visual(str(action["assertion"]))
+        return {"type": kind, "assertion": action["assertion"], "observed": result.get("observed")}
     if kind == "type":
         type_text(str(action.get("text", "")))
         return {"type": kind, "length": len(str(action.get("text", "")))}
@@ -131,7 +180,6 @@ def execute(action: dict) -> dict:
         key(str(action["key"]))
         return {"type": kind, "key": action["key"]}
     if kind == "sleep":
-        import time
         seconds = min(float(action.get("seconds", 0.5)), 30.0)
         time.sleep(seconds)
         return {"type": kind, "seconds": seconds}

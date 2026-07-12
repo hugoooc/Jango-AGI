@@ -45,6 +45,9 @@ pids+=("$!")
 
 for _ in $(seq 1 180); do
   if pgrep -x vsp >/dev/null && xdotool search --onlyvisible --name OpenVSP >/dev/null 2>&1; then
+    # A window can exist before FLTK has finished painting the model/tree. Do
+    # not advertise a healthy worker until vision has stable pixels to inspect.
+    sleep "${OPENVSP_SETTLE_SECONDS:-5}"
     break
   fi
   sleep 0.5

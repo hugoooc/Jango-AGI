@@ -152,6 +152,9 @@ def wing_span_actions(value: float) -> list[dict]:
         {"type": "type", "text": str(value)},
         {"type": "key", "key": "Return"},
         {"type": "sleep", "seconds": 1.0},
+        {"type": "vision_assert", "assertion": (
+            f"the Wing geometry editor is open on the Plan tab and the Span input visibly shows {value}"
+        )},
     ]
 
 
