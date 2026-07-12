@@ -22,6 +22,7 @@ from app_mapper.config import (
     DEFAULT_NODE_OBSERVATION_ROOT,
     DEFAULT_NODE_REGISTRY_ROOT,
     DEFAULT_REPLAY_ROOT,
+    DEFAULT_RECURSIVE_ROOT,
     DEFAULT_TRANSITION_ARTIFACT_ROOT,
     DEFAULT_VALIDATION_ROOT,
     DEFAULT_VIEWER_ROOT,
@@ -45,8 +46,10 @@ from app_mapper.holo import (
 from app_mapper.interpretation import capture_interpretation_observation, validate_and_filter
 from app_mapper.menu_inventory import capture_menu_inventory
 from app_mapper.safe_expansion import expand_safe_frontier, latest_inventory
+from app_mapper.recursive_exploration import explore_recursive_tabs
 from app_mapper.macos.accessibility import read_application_tree
 from app_mapper.macos.applications import (
+    activate_application,
     choose_primary_window,
     find_processes,
     inspect_bundle,
@@ -560,6 +563,7 @@ def run_safe_expansion(
                 print(f"- {error}")
             return 2
         pid = int(diagnostics["processes"][0]["pid"])
+        activate_application(pid)
     else:
         pid = 0
     try:
@@ -596,6 +600,62 @@ def run_safe_expansion(
     return 0 if record.success else 4
 
 
+def run_recursive_exploration(
+    execute: bool,
+    run_root: Path,
+    graph_root: Path,
+    registry_root: Path,
+    max_actions: int,
+    timeout: float,
+    max_depth: int,
+    max_elements: int,
+) -> int:
+    diagnostics = collect_diagnostics()
+    if execute:
+        errors = _identity_preflight(diagnostics)
+        if diagnostics["running"] and not list_windows(int(diagnostics["processes"][0]["pid"])):
+            errors.append("OpenVSP has no visible windows.")
+        if errors:
+            print("Recursive exploration stopped before interaction.")
+            for error in errors:
+                print(f"- {error}")
+            return 2
+        pid = int(diagnostics["processes"][0]["pid"])
+        activate_application(pid)
+    else:
+        pid = 0
+    try:
+        record, run = explore_recursive_tabs(
+            pid,
+            diagnostics,
+            run_root,
+            graph_root,
+            registry_root,
+            execute=execute,
+            max_actions=max_actions,
+            timeout=timeout,
+            max_depth=max_depth,
+            max_elements=max_elements,
+        )
+    except Exception as exc:
+        print(f"Recursive exploration failed: {type(exc).__name__}: {exc}")
+        return 3
+    print(f"Recursive exploration artifacts: {run}")
+    print(f"Mode: {record.mode}")
+    for candidate in record.candidates:
+        print(
+            f"- {' > '.join(candidate.parent_path)} > {candidate.label} tab"
+            f" | depth={candidate.depth} | {candidate.status}"
+        )
+        if candidate.error:
+            print(f"  {candidate.error}")
+    print("Summary: " + ", ".join(f"{k}={v}" for k, v in record.summary.items()))
+    print(f"Actions executed: {record.actions_executed}")
+    if not execute:
+        print("Plan only: rerun with --execute to map these exact visual tabs.")
+    return 0 if record.success else 4
+
+
 def run_validation(
     graph_root: Path,
     registry_root: Path,
@@ -617,6 +677,7 @@ def run_validation(
             print(f"- {error}")
         return 2
     pid = int(diagnostics["processes"][0]["pid"])
+    activate_application(pid)
     try:
         record, run = validate_graph(
             pid,
@@ -664,6 +725,7 @@ def run_replay(
             print(f"- {error}")
         return 2
     pid = int(diagnostics["processes"][0]["pid"])
+    activate_application(pid)
     try:
         result, run = replay_edge(
             edge_id,
@@ -965,6 +1027,19 @@ def build_parser() -> argparse.ArgumentParser:
     expansion_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
     expansion_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
 
+    recursive_parser = subparsers.add_parser(
+        "explore-recursive",
+        help="Map approved internal manager tabs at graph depth two.",
+    )
+    recursive_parser.add_argument("--execute", action="store_true")
+    recursive_parser.add_argument("--run-root", type=Path, default=DEFAULT_RECURSIVE_ROOT)
+    recursive_parser.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
+    recursive_parser.add_argument("--registry-root", type=Path, default=DEFAULT_NODE_REGISTRY_ROOT)
+    recursive_parser.add_argument("--max-actions", type=int, default=6)
+    recursive_parser.add_argument("--timeout", type=float, default=8.0)
+    recursive_parser.add_argument("--max-depth", type=int, default=DEFAULT_AX_MAX_DEPTH)
+    recursive_parser.add_argument("--max-elements", type=int, default=DEFAULT_AX_MAX_ELEMENTS)
+
     replay_parser = subparsers.add_parser("replay", help="Replay one recorded safe graph edge.")
     replay_parser.add_argument("edge_id")
     replay_parser.add_argument("--graph-root", type=Path, default=DEFAULT_GRAPH_ROOT)
@@ -1158,6 +1233,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.graph_root,
             args.registry_root,
             args.max_candidates,
+            args.timeout,
+            args.max_depth,
+            args.max_elements,
+        )
+    if args.command == "explore-recursive":
+        if args.max_actions < 2:
+            parser.error("--max-actions must be at least 2")
+        if args.timeout <= 0 or args.max_depth < 0 or args.max_elements < 1:
+            parser.error("timeout/elements must be positive and AX depth non-negative")
+        return run_recursive_exploration(
+            args.execute,
+            args.run_root,
+            args.graph_root,
+            args.registry_root,
+            args.max_actions,
             args.timeout,
             args.max_depth,
             args.max_elements,

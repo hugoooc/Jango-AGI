@@ -606,6 +606,43 @@ Turn approved Milestone 9 controls into real graph nodes and reversible edges.
 
 `Implemented — awaiting manual validation`
 
+## Milestone 11 — Recursive Internal Navigation
+
+### Goal
+
+Create verified graph depth beyond the workspace-to-manager star without activating editing controls.
+
+### Scope
+
+- Inspect targeted screenshots of mapped FLTK managers because their internal controls lack usable Accessibility labels.
+- Admit only exact human-reviewed visual navigation controls.
+- Use normalized window-relative coordinates rather than absolute screen positions.
+- Capture the manager window itself for internal destination screenshots.
+- Attach deterministic semantic identity for each approved tab state.
+- Verify return to the parent tab after every child state.
+- Verify the workspace after closing the parent manager.
+- Persist replayable forward and reverse tab edges.
+- Lay out the viewer in graph-depth rings.
+
+### Initial recursive frontier
+
+- `Variable Presets > Group` tab.
+- `Variable Presets > Settings` tab.
+
+Other visible manager controls are currently editors, Apply/Run operations, model selections, tree mutations, sliders, or text fields and remain excluded.
+
+### Acceptance gate
+
+- Both approved tab states are distinct depth-two nodes.
+- Each tab has a verified return edge to the Apply-tab parent.
+- The parent manager closes and the original workspace is verified.
+- The viewer reports graph depth 2 and visually separates the outer depth ring.
+- No model value, setting, geometry, file, or analysis is changed.
+
+### Status
+
+`Implemented — live validated, awaiting viewer inspection`
+
 ## Likely Technical Stack
 
 - Python 3.12.
@@ -749,7 +786,8 @@ These should be answered through experiments instead of assumed upfront:
 | 8 | Graph viewer and validation | Implemented — awaiting manual validation |
 | 9 | Read-only expansion inventory | Implemented — awaiting manual validation |
 | 10 | Guarded safe-screen expansion | Implemented — awaiting manual validation |
+| 11 | Recursive internal navigation | Implemented — live validated, awaiting viewer inspection |
 
 ## Immediate Next Step
 
-Run the Milestone 10 three-screen guarded expansion test and inspect its return verification before scaling across the remaining approved frontier.
+Inspect the Milestone 11 depth-two viewer. Broader recursion now requires disposable geometry fixtures because the remaining internal controls are context-dependent editors rather than safe navigation.

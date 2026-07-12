@@ -114,7 +114,7 @@ class IdentityDecision(StrictModel):
 class EdgeAction(StrictModel):
     action_key: str = Field(min_length=1, max_length=100)
     semantic_description: str
-    mechanism: Literal["macos_accessibility"] = "macos_accessibility"
+    mechanism: Literal["macos_accessibility", "quartz_coordinate"] = "macos_accessibility"
     accessibility_locator: dict[str, Any]
     keyboard_locator: str | None = None
     visual_locator: dict[str, Any] | None = None
@@ -354,6 +354,30 @@ class SafeExpansionRecord(StrictModel):
     inventory_path: str
     max_candidates: int = Field(ge=1)
     candidates: list[SafeExpansionCandidate]
+    actions_executed: int = Field(default=0, ge=0)
+    summary: dict[str, int] = Field(default_factory=dict)
+    success: bool = False
+
+
+class RecursiveCandidate(StrictModel):
+    candidate_id: str
+    parent_path: list[str]
+    label: str
+    depth: int = Field(ge=2)
+    status: Literal["proposed", "already_mapped", "succeeded", "failed", "skipped"]
+    source_node_id: str | None = None
+    destination_node_id: str | None = None
+    edge_ids: list[str] = Field(default_factory=list)
+    return_verified: bool = False
+    error: str | None = None
+
+
+class RecursiveExplorationRecord(StrictModel):
+    schema_version: Literal[1] = 1
+    started_at: str
+    completed_at: str | None = None
+    mode: Literal["plan", "execute"]
+    candidates: list[RecursiveCandidate]
     actions_executed: int = Field(default=0, ge=0)
     summary: dict[str, int] = Field(default_factory=dict)
     success: bool = False

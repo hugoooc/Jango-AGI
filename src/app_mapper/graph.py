@@ -29,6 +29,7 @@ from app_mapper.models import (
     NodeRecord,
 )
 from app_mapper.transition import ABOUT_MENU_TITLES, wait_for
+from app_mapper.macos.screenshots import capture_window
 
 
 class GraphError(RuntimeError):
@@ -72,6 +73,7 @@ def _capture_identified_state(
     max_depth: int,
     max_elements: int,
     semantic_hint: dict[str, str] | None = None,
+    target_window_id: int | None = None,
 ) -> str:
     destination.mkdir(parents=True, exist_ok=False)
     write_json(
@@ -84,6 +86,17 @@ def _capture_identified_state(
         },
     )
     capture_interpretation_observation(pid, destination, max_depth, max_elements)
+    ax_windows = application_windows(pid)
+    if not ax_windows or not all(
+        summary.get(str(ApplicationServices.kAXRoleAttribute))
+        == ApplicationServices.kAXWindowRole
+        for _, summary in ax_windows
+    ):
+        raise GraphError(
+            "OpenVSP returned a malformed Accessibility window set; capture refused."
+        )
+    if target_window_id is not None:
+        capture_window(target_window_id, destination / "screenshot.png")
     if semantic_hint is not None:
         write_json(destination / "semantic-hint.json", semantic_hint)
     decision = identify_observation(destination, registry_root)
@@ -102,6 +115,7 @@ def capture_identified_state(
     max_depth: int,
     max_elements: int,
     semantic_hint: dict[str, str] | None = None,
+    target_window_id: int | None = None,
 ) -> str:
     return _capture_identified_state(
         pid,
@@ -111,6 +125,7 @@ def capture_identified_state(
         max_depth,
         max_elements,
         semantic_hint,
+        target_window_id,
     )
 
 
@@ -427,6 +442,9 @@ def _actions() -> dict[str, EdgeAction]:
             expected_postconditions=["workspace destination verified"],
             reverse_action_key=open_key,
         )
+    from app_mapper.recursive_exploration import curated_edge_actions
+
+    actions.update(curated_edge_actions())
     return actions
 
 
@@ -578,6 +596,16 @@ def replay_edge(
     if edge.action.action_key not in allowed_actions:
         raise ReplayRefused(f"Action {edge.action.action_key!r} is not executable.")
     trusted_action = allowed_actions[edge.action.action_key]
+    tab_action: dict[str, Any] | None = None
+    tab_window_id: int | None = None
+    if edge.action.action_key.startswith("select_tab_variable_presets_"):
+        from app_mapper.recursive_exploration import (
+            curated_tab_actions,
+            current_variable_presets_window,
+        )
+
+        tab_action = curated_tab_actions()[edge.action.action_key]
+        tab_window_id = int(current_variable_presets_window(pid)["window_id"])
 
     def screen_hint() -> dict[str, str]:
         menu_path = trusted_action.accessibility_locator["menu_path"]
@@ -605,11 +633,14 @@ def replay_edge(
             max_depth,
             max_elements,
         )
-        source_id = (
-            _capture_identified_state(*source_args, screen_hint())
-            if edge.action.action_key.startswith("dismiss_screen_")
-            else _capture_identified_state(*source_args)
-        )
+        if edge.action.action_key.startswith("dismiss_screen_"):
+            source_id = _capture_identified_state(*source_args, screen_hint())
+        elif tab_action is not None:
+            source_id = _capture_identified_state(
+                *source_args, tab_action["source_hint"], tab_window_id
+            )
+        else:
+            source_id = _capture_identified_state(*source_args)
         result["observed_source_node_id"] = source_id
         result["expected_source_node_id"] = edge.source_node_id
         if source_id != edge.source_node_id:
@@ -652,11 +683,17 @@ def replay_edge(
                 edge.destination_node_id,
                 timeout,
             )
+        elif tab_action is not None:
+            from app_mapper.recursive_exploration import click_curated_tab
+
+            click_curated_tab(pid, edge.action.action_key)
         result["action_performed"] = True
 
         semantic_hint = None
         if edge.action.action_key.startswith("open_screen_"):
             semantic_hint = screen_hint()
+        elif tab_action is not None:
+            semantic_hint = tab_action["destination_hint"]
         destination_args = (
             pid,
             diagnostics,
@@ -665,11 +702,14 @@ def replay_edge(
             max_depth,
             max_elements,
         )
-        destination_id = (
-            _capture_identified_state(*destination_args, semantic_hint)
-            if semantic_hint is not None
-            else _capture_identified_state(*destination_args)
-        )
+        if tab_action is not None:
+            destination_id = _capture_identified_state(
+                *destination_args, semantic_hint, tab_window_id
+            )
+        elif semantic_hint is not None:
+            destination_id = _capture_identified_state(*destination_args, semantic_hint)
+        else:
+            destination_id = _capture_identified_state(*destination_args)
         result["observed_destination_node_id"] = destination_id
         result["expected_destination_node_id"] = edge.destination_node_id
         if destination_id != edge.destination_node_id:
@@ -718,6 +758,14 @@ def replay_edge(
                     timeout,
                 )
                 result["failure_cleanup"] = "manager/dialog dismissed"
+            except Exception as cleanup_error:
+                result["failure_cleanup"] = f"failed: {cleanup_error}"
+        elif result["action_performed"] and tab_action is not None:
+            try:
+                from app_mapper.recursive_exploration import click_curated_tab
+
+                click_curated_tab(pid, edge.action.reverse_action_key)
+                result["failure_cleanup"] = "original tab restored"
             except Exception as cleanup_error:
                 result["failure_cleanup"] = f"failed: {cleanup_error}"
         _update_replay(graph_root, registry_root, edge, success=False)

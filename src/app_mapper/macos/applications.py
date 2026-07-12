@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import Quartz
-from AppKit import NSWorkspace
+from AppKit import NSApplicationActivateIgnoringOtherApps, NSRunningApplication, NSWorkspace
 
 from app_mapper.config import TargetApplication
 
@@ -60,6 +60,13 @@ def find_processes(target: TargetApplication) -> list[dict[str, Any]]:
             }
         )
     return processes
+
+
+def activate_application(pid: int) -> bool:
+    application = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+    if application is None or application.isTerminated():
+        return False
+    return bool(application.activateWithOptions_(NSApplicationActivateIgnoringOtherApps))
 
 
 def _bounds_to_dict(bounds: Any) -> dict[str, float]:

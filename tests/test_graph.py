@@ -283,3 +283,48 @@ def test_replay_executes_only_trusted_safe_screen_path(monkeypatch, tmp_path: Pa
 
     assert result["success"] is True
     assert calls == [("File", "Preferences...")]
+
+
+def test_replay_executes_curated_internal_tab_action(monkeypatch, tmp_path: Path) -> None:
+    graph_root = tmp_path / "graph"
+    edge_root = graph_root / "edges"
+    registry = tmp_path / "nodes"
+    replay_root = tmp_path / "replays"
+    edge_root.mkdir(parents=True)
+    source, destination = "node-apply-tab", "node-group-tab"
+    _write_node(registry, source, "manager")
+    _write_node(registry, destination, "manager")
+    edge = GraphEdge(
+        edge_id="edge-group-tab",
+        source_node_id=source,
+        destination_node_id=destination,
+        action=EdgeAction(
+            action_key="select_tab_variable_presets_group",
+            semantic_description="Select Group",
+            mechanism="quartz_coordinate",
+            accessibility_locator={},
+            visual_locator={"normalized_click_point": [999, 999]},
+            preconditions=[],
+            expected_postconditions=[],
+            reverse_action_key="select_tab_variable_presets_apply_from_group",
+        ),
+        evidence=[],
+    )
+    (edge_root / "edge-group-tab.json").write_text(edge.model_dump_json(), encoding="utf-8")
+    _capture_sequence(monkeypatch, [source, destination])
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "app_mapper.recursive_exploration.current_variable_presets_window",
+        lambda _pid: {"window_id": 42},
+    )
+    monkeypatch.setattr(
+        "app_mapper.recursive_exploration.click_curated_tab",
+        lambda _pid, action_key: calls.append(action_key),
+    )
+
+    result, _ = replay_edge(
+        "edge-group-tab", 123, {}, graph_root, registry, replay_root, 1, 2, 20
+    )
+
+    assert result["success"] is True
+    assert calls == ["select_tab_variable_presets_group"]

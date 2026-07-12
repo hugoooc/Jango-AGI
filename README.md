@@ -2,7 +2,7 @@
 
 An incremental Python prototype for observing and mapping the OpenVSP user interface on macOS.
 
-The project implements Milestones 1–10 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, graph validation, read-only expansion inventory, and guarded safe-screen expansion. It does not modify or save an OpenVSP model.
+The project implements Milestones 1–11 from [PLAN.md](PLAN.md): observation, guarded interaction, Holo interpretation, stable node identity, graph validation, guarded safe-screen expansion, and recursive internal navigation. It does not modify or save an OpenVSP model.
 
 ## Development commands
 
@@ -17,6 +17,7 @@ uv run python -m app_mapper graph show
 uv run python -m app_mapper graph viewer
 uv run python -m app_mapper inventory-menus
 uv run python -m app_mapper expand-safe --max-candidates 3
+uv run python -m app_mapper explore-recursive
 uv run python -m app_mapper validate --sample-size 5
 uv run python -m app_mapper discover-one-hop
 uv run python -m app_mapper explore --max-depth 1 --max-nodes 10 --max-actions 18
@@ -274,3 +275,30 @@ open artifacts/viewer/index.html
 ```
 
 Do not run the full frontier until the three-screen batch is confirmed. A rerun automatically skips correctly mapped screens. Any ambiguous recovery stops instead of guessing which window to close.
+
+## Milestone 11 recursive internal navigation
+
+The mapped FLTK managers expose almost no meaningful internal Accessibility labels. Targeted screenshots show that most inner controls edit models or settings. The initial reviewed recursive frontier therefore contains the two pure navigation tabs inside Variable Presets.
+
+Review without clicking:
+
+```bash
+uv run python -m app_mapper explore-recursive
+```
+
+Execute the bounded round trip:
+
+```bash
+uv run python -m app_mapper explore-recursive --execute --max-actions 6
+```
+
+The expected result is two `depth=2 | succeeded` entries for `Group` and `Settings`, six total actions, and `failed=0`. The command opens Variable Presets, verifies each child tab, returns to Apply after each, closes the manager, and verifies the original workspace.
+
+Regenerate the viewer:
+
+```bash
+uv run python -m app_mapper graph viewer
+open artifacts/viewer/index.html
+```
+
+The current baseline is 31 nodes, 60 directed edges, and graph depth 2. The viewer uses concentric rings so the two recursive tab nodes appear outside their Variable Presets parent. Broader depth requires disposable Wing/Fuselage fixtures; remaining controls in the blank model are editing operations, not safe navigation.
