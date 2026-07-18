@@ -53,7 +53,7 @@ class LocalVmProvider:
     """
 
     def __init__(self, root: str | None = None):
-        self.root = Path(root) if root else Path(tempfile.mkdtemp(prefix="otto-api-fleet-"))
+        self.root = Path(root) if root else Path(tempfile.mkdtemp(prefix="jango-api-fleet-"))
         self.root.mkdir(parents=True, exist_ok=True)
         self.provisioned: list[VmHandle] = []
         self.released: list[VmHandle] = []
@@ -100,19 +100,19 @@ class DockerVmProvider:
         self.port_base = port_base
         self.startup_timeout_s = startup_timeout_s
         self._counter = 0
-        self.workspace_root = Path(workspace_root or tempfile.mkdtemp(prefix="hacknation-container-runs-")).resolve()
+        self.workspace_root = Path(workspace_root or tempfile.mkdtemp(prefix="jango-container-runs-")).resolve()
         self.workspace_root.mkdir(parents=True, exist_ok=True)
         self.platform = platform
 
     def provision(self, spec: VmSpec) -> VmHandle:
         self._counter += 1
-        name = f"hacknation-{spec.worker_id}-{uuid.uuid4().hex[:8]}"
+        name = f"jango-{spec.worker_id}-{uuid.uuid4().hex[:8]}"
         command = [
             "docker", "run", "-d", "--rm", "--name", name,
             "--platform", self.platform,
             "-p", "127.0.0.1::8080",
             "-v", f"{self.workspace_root}:/worker-runs",
-            "--label", "hacknation.worker=true",
+            "--label", "jango.worker=true",
             "-e", f"WORKER_ID={spec.worker_id}",
             "-e", "WORKER_PORT=8080",
         ]

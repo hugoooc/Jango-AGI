@@ -1,8 +1,8 @@
-name: hacknation-chief
-runtime_name: hacknation-chief
-slug: hacknation-chief
+name: jango
+runtime_name: jango
+slug: jango
 path: sdk/introspection/recipe
-description: Capability-driven Chief Engineer that delegates, runs real solver fleets, and iterates against measurable goals.
+description: Jango is a capability-driven Chief Engineer that delegates, runs real solver fleets, and iterates against measurable goals.
 strict: true
 runtime:
   kind: byor

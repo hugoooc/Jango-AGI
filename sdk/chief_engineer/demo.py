@@ -18,7 +18,7 @@ from .mission import AutonomousChief
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run the Hacknation chief engineer")
+    parser = argparse.ArgumentParser(description="Run Jango")
     parser.add_argument("goal", nargs="?", default="Optimize L/D while staying stable")
     parser.add_argument("--iterations", "--cycles", dest="cycles", type=int, default=3)
     parser.add_argument("--workers", type=int, default=None)

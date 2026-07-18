@@ -1,4 +1,4 @@
-"""Streamable-HTTP MCP boundary for the Hacknation engineering runtime.
+"""Streamable-HTTP MCP boundary for the Jango engineering runtime.
 
 Introspection agents use these tools to discover whatever engineering
 adapters are installed and to operate missions without receiving solver or
@@ -30,7 +30,7 @@ PORT = int(os.environ.get("CHIEF_MCP_PORT", "8770"))
 TERMINAL_STATES = {"complete", "incomplete", "failed"}
 
 mcp = FastMCP(
-    "Hacknation Engineering Control Plane",
+    "Jango",
     instructions=(
         "Capability-driven engineering execution. Discover adapters first, then launch and "
         "inspect missions. Solver metrics and feasibility gates are deterministic evidence."
@@ -146,9 +146,9 @@ def wait_for_mission(mission_id: str, timeout_seconds: int = 45, after: int = 0)
 async def _health(_request: Request) -> JSONResponse:
     try:
         upstream = _request_json_health()
-        return JSONResponse({"service": "hacknation-engineering-mcp", "upstream": upstream})
+        return JSONResponse({"service": "jango-engineering-mcp", "upstream": upstream})
     except RuntimeError as exc:
-        return JSONResponse({"service": "hacknation-engineering-mcp", "error": str(exc)}, status_code=503)
+        return JSONResponse({"service": "jango-engineering-mcp", "error": str(exc)}, status_code=503)
 
 
 def _request_json_health() -> dict[str, Any]:

@@ -1,179 +1,134 @@
-# Otto / Hacknation
+# Jango
 
-> **Hacknation architecture:** the system is moving from GUI computer vision
-> to direct engineering-software APIs. The chief engineer decomposes a goal,
-> builds sequential/parallel specialist teams, provisions API workers, transfers
-> selected design artifacts between domains, and iterates through chief reviews.
-> See [sdk/HACKNATION.md](sdk/HACKNATION.md).
+**An API-first autonomous Chief Engineer for multidisciplinary engineering work.**
 
-**Teach once. Operate forever.**
+Jango accepts a difficult objective such as “minimize mass under these thermal
+and stability constraints,” discovers the capabilities exposed by connected
+engineering software, builds a dependency-aware execution plan, provisions
+isolated workers, delegates parallel and sequential studies, and iterates from
+solver evidence until it reaches an acceptance or stop condition.
 
-Otto is evolving into an engineering chief-engineer agent that coordinates
-specialized workers through software APIs. The original desktop computer-use
-prototype remains in the repository as a reference implementation.
+Jango does not use screenshots, mouse automation, or computer vision in its
+active execution path. Engineering work is performed through typed software
+APIs and auditable mission events.
 
-Instead of being programmed for a particular interface, Otto reads the software documentation, safely explores the UI using H Company's computer-use models, observes the results of its actions, and builds a persistent procedural memory. It can then compose what it has learned to complete new workflows and adapt existing work when requirements change.
+## What Jango does
 
-The goal is to help engineering teams move up to **10× faster with the same resources**—running more simulations, shortening iteration cycles, accelerating time to market, and ultimately delivering more projects.
+- Converts a natural-language request into a measurable objective and constraints.
+- Discovers domains, metrics, parameters, analyses, limits, and dependencies from adapter manifests.
+- Creates multiple specialists per domain and batches them against an explicit worker budget.
+- Supports sequential handoffs such as geometry → aerodynamics → stability.
+- Supports parallel exploration by many isolated Docker workers.
+- Preserves the incumbent when challengers are infeasible or worse.
+- Streams plans, agents, workers, artifacts, metrics, failures, and Chief decisions to a live control room.
+- Exposes the same durable mission state through HTTP and MCP for hosted agents.
+- Produces evidence-linked improvement proposals without mutating or auto-promoting production.
 
-> [!NOTE]
-> Otto is currently an early-stage prototype. The MVP focuses on a controlled aircraft-design workflow in OpenVSP.
-
-## Why Otto?
-
-Critical workflows in aerospace, engineering, energy, healthcare, and industrial operations often depend on powerful desktop applications that have limited APIs, scarce integrations, and steep learning curves.
-
-Engineers spend a significant part of each project operating complex tools, repeating known procedures, configuring simulations, and translating design changes into software actions. This limits the number of iterations a team can run and the number of projects it can deliver.
-
-Otto turns that operational work into reusable knowledge. With the same engineering resources, teams can:
-
-- Execute repetitive software workflows up to 10× faster
-- Run more simulations and explore more design alternatives
-- Shorten feedback and iteration cycles
-- Move products from design to market faster
-- Increase the number of projects completed in parallel
-- Keep engineers focused on judgment, design, and decision-making
-
-Traditional automation is brittle: it relies on hard-coded coordinates, fixed scripts, or application-specific connectors. Otto takes a different approach. It learns reusable procedures from documentation and verified interaction, then stores them as operational memory that compounds over time.
-
-“Learning” means building persistent, inspectable procedural memory—not updating model weights in real time.
-
-## Demo Application
-
-The first target is [OpenVSP](https://openvsp.org/), a free, NASA-originated parametric aircraft design tool available on Apple Silicon and Intel Macs.
-
-During the learning phase, Otto discovers how to:
-
-- Create and select aircraft components
-- Add fuselages, wings, and tails
-- Modify dimensions, positions, rotations, and symmetries
-- Navigate the 3D viewport
-- Save and validate an aircraft model
-
-Every successful interaction becomes a reusable, parameterized skill with:
-
-- Preconditions
-- Action steps and parameters
-- Expected outcomes
-- Confidence score
-- Validation criteria
-- Recovery strategy
-
-## Demo Scenario
-
-1. Otto starts with OpenVSP and no application-specific procedural memory.
-2. It reads the documentation and safely explores the interface.
-3. A live skill graph grows as actions are discovered and verified.
-4. OpenVSP is reset to a blank project.
-5. The user requests a drone with specific dimensions and components.
-6. Otto combines its learned skills to build the 3D model.
-7. The user adds a constraint, such as a larger wingspan or a different wing position.
-8. Otto updates the existing model and validates the result.
-
-## Desktop Experience
-
-The desktop app is the control center for both learning and execution. It is designed to show the agent's work rather than hide it behind a chat interface.
-
-The MVP experience includes:
-
-- A task composer for natural-language requests and constraints
-- A live view of OpenVSP and the agent's current action
-- A growing skill graph with confidence and verification state
-- An activity timeline containing observations, decisions, and outcomes
-- Controls to pause, approve, retry, or stop execution
-- A validation panel for visual, numerical, and structural checks
-- Persistent procedural memory across sessions
+The orchestration kernel is domain-neutral. Aerospace is the first real adapter,
+not a hardcoded limit: a new adapter can introduce different domains and their
+dependency graph without changing the Chief.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    User["User request"] --> Desktop["Desktop app"]
-    Docs["Documentation"] --> Memory["Documentation memory"]
-    Desktop --> Planner["Planner"]
-    Memory --> Explorer["Explorer"]
-    Planner --> Explorer
-    Explorer --> Holo["Holo 3.1 / H Company"]
-    Holo --> Controller["macOS controller"]
-    Controller <--> OpenVSP["OpenVSP"]
-    Controller --> Observer["Outcome observer"]
-    Observer --> Validator["Validator"]
-    Validator --> Graph["Procedural graph"]
-    Graph --> Compiler["Skill compiler"]
-    Compiler --> Planner
-    Graph --> Desktop
-    Validator --> Desktop
+    User["Open-ended objective"] --> Jango["Jango Chief"]
+    Catalog["Adapter capability catalog"] --> Jango
+    Jango --> Contract["Objective + constraints + budgets"]
+    Contract --> Plan["Dependency-aware mission graph"]
+    Plan --> Teams["Sequential and parallel specialist teams"]
+    Teams --> Fleet["Isolated worker fleet"]
+    Fleet --> APIs["Engineering software APIs"]
+    APIs --> Evidence["Metrics + artifacts + provenance"]
+    Evidence --> Review["Chief review and deterministic gates"]
+    Review -->|iterate| Plan
+    Review -->|accept / stop| Result["Traceable engineering decision"]
+    Plan --> UI["Live control room"]
+    Evidence --> UI
 ```
 
-### Core Components
+## Real execution versus development mode
 
-| Component | Responsibility |
-| --- | --- |
-| **Holo 3.1 / H Company** | UI perception, reasoning, and action selection |
-| **macOS controller** | Screenshots, mouse actions, and keyboard input |
-| **Documentation memory** | Extraction and retrieval of relevant procedures |
-| **Explorer** | Safe testing of reversible actions |
-| **Procedural graph** | Storage of states, actions, preconditions, and outcomes |
-| **Skill compiler** | Conversion of successful trajectories into reusable skills |
-| **Planner** | Composition of skills into new workflows |
-| **Validator** | Visual, numerical, and structural verification |
-| **Desktop app** | Live visualization, supervision, and execution controls |
+Jango has two execution backends:
 
-## Safety by Design
+- `DockerVmProvider` provisions disposable solver containers and is the real
+  isolated-worker path currently used with OpenVSP/VSPAERO.
+- `LocalVmProvider` with `SyntheticApi` is a fast development and test backend.
 
-Otto treats computer use as a supervised, stateful process. The MVP is designed around a few core principles:
+Docker containers provide real process and filesystem isolation, but they are
+not cloud VMs. The `VmProvider` contract is intentionally replaceable by a
+Kubernetes, EC2, or other cloud provider without changing mission logic.
 
-- Prefer reversible exploration and known-safe actions
-- Verify outcomes instead of assuming an action succeeded
-- Keep learned procedures inspectable and traceable
-- Attach confidence and recovery strategies to every skill
-- Ask for approval before destructive or irreversible actions
-- Allow the user to pause or stop execution at any time
+## Run Jango
 
-## MVP Scope
+Requirements: Python virtual environment with the project dependencies, Docker
+for isolated workers, and an OpenVSP worker image for real aerospace studies.
 
-The MVP does not attempt to map all of OpenVSP. It learns approximately 10–15 skills required for a controlled aircraft-design workflow and expands its knowledge only when needed.
+```bash
+cd sdk
 
-### In scope
+MODEL_PATH="$PWD/models/boeing777200.vsp3" \
+CHIEF_WORKER_PROVIDER=docker \
+CHIEF_WORKER_IMAGE=hacknation-openvsp-api-worker:3.51 \
+CHIEF_ENGINEER_WORKDIR="$PWD/chief-engineer-runs" \
+../.venv/bin/python -m chief_engineer.server
+```
 
-- macOS desktop application
-- OpenVSP as the first target application
-- Documentation ingestion and retrieval
-- Safe UI exploration through computer use
-- Persistent procedural skill graph
-- Skill composition for aircraft creation and modification
-- Visual, numerical, and structural validation
-- Human supervision and execution controls
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765), or start a mission directly:
 
-### Out of scope for the first release
+```bash
+curl -s -X POST http://127.0.0.1:8765/api/missions \
+  -H 'Content-Type: application/json' \
+  -d '{"goal":"Optimize L/D while staying stable","workers":12,"cycles":3}'
+```
 
-- Full coverage of OpenVSP
-- Unsupervised operation of high-risk workflows
-- Cross-platform desktop support
-- Real-time model fine-tuning
-- A general marketplace of application skills
+To let a reasoning model author and review mission plans, configure any
+OpenAI-compatible text API:
 
-## Success Criteria
+```bash
+export CHIEF_REASONING_BASE_URL=https://your-model-host/v1
+export CHIEF_REASONING_API_KEY=your-key
+export CHIEF_REASONING_MODEL=your-reasoning-model
+```
 
-The MVP is successful when Otto can:
+Without those variables, Jango uses its deterministic capability-driven
+planner. It still launches real configured solvers; only plan authorship changes.
 
-1. Start with no OpenVSP-specific procedural memory.
-2. Discover and persist the skills required for the demo workflow.
-3. Reuse those skills after OpenVSP is reset.
-4. Build a requested aircraft model from user-provided constraints.
-5. Modify the model in response to a new constraint.
-6. Validate the final model and expose evidence of completion.
+## MCP and Introspection
 
-## Project Status
+The authenticated Streamable-HTTP MCP boundary exposes capability discovery,
+mission launch, monitoring, results, event history, and bounded improvement
+proposals. The Introspection recipe adds a Chief, parallel specialists, an
+independent critic, a read-only maintainer, and trajectory judges.
 
-Otto is under active development. The application architecture, implementation stack, development setup, and contribution guidelines will be documented as the repository takes shape.
+```bash
+python -m sdk.chief_engineer.mcp_server
 
-## Long-Term Vision
+npx @introspection-ai/cli recipes validate --path .introspection/jango.yaml
+npx @introspection-ai/pi-recipes check sdk/introspection/recipe --profile publish
+```
 
-The same architecture can extend beyond aerospace to legacy and specialized software across engineering, energy, healthcare, and industrial operations.
+Never commit MCP tokens, model keys, or Introspection credentials. They belong
+in environment variables or the deployment platform’s encrypted credential store.
 
-The goal is simple: transform successful interaction into durable operational knowledge that can be inspected, improved, and reused.
+## Verification
 
----
+```bash
+.venv/bin/python -m unittest sdk.tests.test_chief_engineer
+```
 
-**Otto — Teach once. Operate forever.**
+The test suite covers capability-driven planning, custom non-aerospace domains,
+dependency ordering, fan-out and batching, worker cleanup, durable events,
+failure handling, and controlled improvement proposals.
+
+## Repository map
+
+- `sdk/chief_engineer/` — mission kernel, planner, adapters, fleet, APIs, MCP, and live UI.
+- `sdk/docker/` — real API-worker container image.
+- `sdk/introspection/recipe/` — hosted multi-agent organization and judges.
+- `.introspection/jango.yaml` — Introspection runtime manifest.
+- `sdk/JANGO.md` — detailed execution architecture and operating notes.
+- `sdk/tests/` — unit and MCP smoke tests.
+
+Legacy GUI/computer-vision experiments remain in historical folders for
+reference, but they are not imported by Jango’s active API-only runtime.

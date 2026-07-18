@@ -84,7 +84,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/health":
             self._json(200, {
-                "service": "hacknation-chief-engineer",
+                "service": "jango",
                 "backend": _backend_name(),
                 "worker_provider": _worker_provider_name(),
                 "reasoning": _reasoning_name(),
@@ -419,7 +419,7 @@ def _reasoning_name() -> str:
 def main() -> None:
     _restore_missions()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"Hacknation mission control listening on :{PORT} ({_backend_name()})", flush=True)
+    print(f"Jango mission control listening on :{PORT} ({_backend_name()})", flush=True)
     server.serve_forever()
 
 

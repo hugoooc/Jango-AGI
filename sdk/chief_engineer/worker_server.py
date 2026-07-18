@@ -134,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    print(f"Hacknation API worker {WORKER_ID} listening on :{PORT}", flush=True)
+    print(f"Jango API worker {WORKER_ID} listening on :{PORT}", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
 

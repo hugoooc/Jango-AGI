@@ -1,4 +1,4 @@
-"""Hacknation API-first chief-engineer orchestration."""
+"""Jango API-first Chief Engineer orchestration."""
 
 from .agents import (
     AerodynamicsAgent,

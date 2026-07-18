@@ -1,4 +1,4 @@
-# Hacknation Chief on Introspection
+# Jango on Introspection
 
 This recipe hosts the reasoning organization. Real engineering execution remains behind the `engineering` Streamable-HTTP MCP server, which calls the API-first mission kernel and its isolated solver workers.
 
@@ -7,7 +7,7 @@ The recipe is deliberately capability-driven: adding an adapter manifest makes n
 Validate from the repository root:
 
 ```bash
-npx @introspection-ai/cli recipes validate --path .introspection/hacknation-chief.yaml
+npx @introspection-ai/cli recipes validate --path .introspection/jango.yaml
 npx @introspection-ai/pi-recipes check sdk/introspection/recipe --profile publish
 ```
 

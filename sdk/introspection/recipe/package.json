@@ -1,7 +1,7 @@
 {
-  "name": "hacknation-chief",
+  "name": "jango",
   "version": "0.2.0",
-  "description": "An autonomous, capability-driven Chief Engineer for multidisciplinary API solver fleets.",
+  "description": "Jango: an autonomous, capability-driven Chief Engineer for multidisciplinary API solver fleets.",
   "type": "module",
   "pi": {
     "agents": ["agents/*.yaml"],

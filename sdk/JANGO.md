@@ -1,6 +1,6 @@
-# Hacknation: API-first chief engineer
+# Jango: API-first Chief Engineer
 
-Hacknation changes Otto's execution principle. The chief engineer does not
+Jango's Chief does not
 look at pixels and does not click OpenVSP. It receives an engineering objective,
 creates a dependency graph of specialist teams, provisions isolated API
 workers, transfers selected design artifacts between domains, and feeds the
@@ -50,7 +50,7 @@ The core implementation lives in `chief_engineer/`:
 
 No module in this path imports the old desktop, screenshot, Holo, or GUI
 trajectory layers. The old implementation remains available for comparison,
-but it is no longer the execution path for Hacknation.
+but it is no longer the execution path for Jango.
 
 ## Run the real OpenVSP product
 
@@ -99,7 +99,7 @@ while keeping the same `VmProvider` contract. A container worker runs
 
 ## Runtime boundary
 
-The Hacknation entry points import nothing from `cu/`, `bot/`,
+The Jango entry points import nothing from `cu/`, `bot/`,
 `container_worker/`, or the former Holo integration. Those folders remain only
 as legacy prototype history for now; they are outside the API-only runtime and
 can be removed in a dedicated cleanup commit once the branch is migrated.
