@@ -238,6 +238,8 @@ def _chief(mission_id: str, bus: EventBus) -> AutonomousChief:
         max_workers=32,
         parameter_specs=registry.parameter_specs(),
         metric_specs=registry.metric_specs(),
+        domain_dependencies=registry.domain_dependencies(),
+        domain_parameter_counts=registry.domain_parameter_counts(),
         vm_provider=_vm_provider(mission_id),
     )
 
@@ -280,6 +282,11 @@ def _registry(mission_id: str = "capabilities") -> SoftwareAdapterRegistry:
             concurrency=concurrency,
             parameter_specs=OpenVSPDirectApi.PARAMETER_SPECS,
             metric_specs=OpenVSPDirectApi.METRIC_SPECS,
+            domain_dependencies={
+                "aerodynamics": ("geometry",),
+                "stability": ("geometry", "aerodynamics"),
+                "structures": ("geometry",),
+            },
         ),
         openvsp_factory,
     )

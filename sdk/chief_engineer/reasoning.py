@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import math
 import re
 import urllib.request
 from dataclasses import dataclass
@@ -63,14 +64,32 @@ class ReasoningProvider(Protocol):
 class RuleBasedReasoningProvider:
     """Deterministic chief logic used when no external reasoning API is set."""
 
+    def __init__(
+        self,
+        domain_dependencies: Mapping[str, Sequence[str]] | None = None,
+        domain_parameter_counts: Mapping[str, int] | None = None,
+    ):
+        self.domain_dependencies = {
+            str(domain): tuple(map(str, dependencies))
+            for domain, dependencies in (domain_dependencies or {}).items()
+        }
+        self.domain_parameter_counts = {
+            str(domain): max(0, int(count))
+            for domain, count in (domain_parameter_counts or {}).items()
+        }
+
     def plan(self, goal: GoalSpec, worker_budget: int = 12, max_cycles: int = 3) -> MissionPlan:
         stages: list[StageSpec] = []
         previous: tuple[str, ...] = ()
         required_analyses = goal.analyses or tuple(domain_name(domain) for domain in goal.domains)
-        domains = _ordered_domains(goal.domains) or list(required_analyses)
+        domains = _ordered_domains(goal.domains, self.domain_dependencies) or list(required_analyses)
 
         for index, domain in enumerate(domains):
-            fanout, keep = _stage_shape(domain, worker_budget, bool(previous))
+            fanout, keep = _stage_shape(
+                worker_budget,
+                bool(previous),
+                self.domain_parameter_counts.get(domain, 1),
+            )
             stage = StageSpec(
                 id=_stage_id(domain, index),
                 name=_stage_name(domain),
@@ -134,18 +153,20 @@ class OpenAICompatibleReasoningProvider:
         self.fallback = fallback or RuleBasedReasoningProvider()
 
     @classmethod
-    def from_environment(cls):
+    def from_environment(cls, fallback=None):
         base = os.environ.get("CHIEF_REASONING_BASE_URL")
         key = os.environ.get("CHIEF_REASONING_API_KEY")
         model = os.environ.get("CHIEF_REASONING_MODEL")
         if not (base and key and model):
             return None
-        return cls(base, key, model)
+        return cls(base, key, model, fallback=fallback)
 
     def plan(self, goal: GoalSpec, worker_budget: int, max_cycles: int) -> MissionPlan:
+        dependencies = getattr(self.fallback, "domain_dependencies", {})
         prompt = (
             "You are a chief engineer. Build a sequential/parallel workflow using only the adapter-declared "
             f"domains {list(map(domain_name, goal.domains))} and analyses {list(goal.analyses)}. "
+            f"Adapter-declared domain dependencies are {dependencies}. "
             "Return JSON with rationale and stages. "
             "Each stage needs id, name, domain, analyses, fanout_per_input, keep, depends_on, instructions. "
             f"Worker budget: {worker_budget}. Max cycles: {max_cycles}. Goal: {goal.raw_request}."
@@ -162,6 +183,7 @@ class OpenAICompatibleReasoningProvider:
                 depends_on=tuple(str(value) for value in item.get("depends_on", [])),
                 instructions=str(item.get("instructions", "")),
             ) for item in data["stages"])
+            _validate_model_plan(stages, goal, worker_budget)
             return MissionPlan(stages, max_cycles, worker_budget, str(data.get("rationale", "Model-authored plan")))
         except Exception:
             return self.fallback.plan(goal, worker_budget, max_cycles)
@@ -178,6 +200,10 @@ class OpenAICompatibleReasoningProvider:
             action = str(data.get("action", "iterate"))
             if action not in {"accept", "iterate", "stop"}:
                 action = "iterate"
+            if action == "accept" and not feasible:
+                action = "iterate"
+            if action == "accept" and not improved:
+                action = "stop"
             return ChiefDecision(action, str(data.get("rationale", "")), str(data.get("feedback", "")))
         except Exception:
             return self.fallback.review(goal, cycle, incumbent_metrics, challenger_metrics, improved, feasible)
@@ -202,25 +228,41 @@ class OpenAICompatibleReasoningProvider:
         return json.loads(match.group(0))
 
 
-def _ordered_domains(domains) -> list[str]:
+def _ordered_domains(
+    domains,
+    dependencies: Mapping[str, Sequence[str]] | None = None,
+) -> list[str]:
+    """Stable topological order driven entirely by adapter-declared edges."""
     selected = list(dict.fromkeys(domain_name(domain) for domain in domains))
-    preferred = ("geometry", "aerodynamics", "stability", "structures")
-    return [name for name in preferred if name in selected] + [
-        name for name in selected if name not in preferred
-    ]
+    selected_set = set(selected)
+    edges = {
+        domain: tuple(item for item in (dependencies or {}).get(domain, ()) if item in selected_set)
+        for domain in selected
+    }
+    ordered: list[str] = []
+    remaining = list(selected)
+    while remaining:
+        ready = [domain for domain in remaining if all(dep in ordered for dep in edges[domain])]
+        if not ready:
+            cycle = " -> ".join(remaining)
+            raise ValueError(f"adapter domain dependencies contain a cycle: {cycle}")
+        for domain in ready:
+            ordered.append(domain)
+            remaining.remove(domain)
+    return ordered
 
 
-def _stage_shape(domain: str, worker_budget: int, has_parent: bool) -> tuple[int, int]:
-    """Choose generic fan-out while preserving useful defaults for known APIs."""
-    if domain == "geometry":
-        return min(6, max(4, worker_budget)), 2
-    if domain == "aerodynamics":
-        return 3, 3
-    if domain == "stability":
-        return 2, 2
-    if domain == "structures":
-        return (3 if has_parent else min(6, max(2, worker_budget))), 2
-    return (3 if has_parent else min(6, max(3, worker_budget))), 2
+def _stage_shape(worker_budget: int, has_parent: bool, parameter_count: int) -> tuple[int, int]:
+    """Scale exploration from declared design-space width, independent of domain vocabulary."""
+    width = max(1, int(parameter_count))
+    if has_parent:
+        fanout = min(4, max(2, math.ceil(math.sqrt(width))))
+    else:
+        fanout = min(8, max(4, 2 * math.ceil(math.sqrt(width))))
+    # worker_budget limits concurrent infrastructure, not the number of
+    # hypotheses the fleet may evaluate in batches.
+    fanout = min(fanout, max(2, int(worker_budget) * 4))
+    return fanout, min(2, fanout)
 
 
 def _stage_id(domain: str, index: int) -> str:
@@ -229,9 +271,36 @@ def _stage_id(domain: str, index: int) -> str:
 
 
 def _stage_name(domain: str) -> str:
-    return {
-        "geometry": "Geometry concept forge",
-        "aerodynamics": "Aerodynamic campaign",
-        "stability": "Flight dynamics review",
-        "structures": "Structural closure",
-    }.get(domain, f"{domain.replace('_', ' ').title()} campaign")
+    return f"{domain.replace('_', ' ').title()} campaign"
+
+
+def _validate_model_plan(stages: tuple[StageSpec, ...], goal: GoalSpec, worker_budget: int) -> None:
+    """Fail closed when a reasoning model invents capabilities or an invalid graph."""
+    if not stages:
+        raise ValueError("model-authored plan has no stages")
+    allowed_domains = {domain_name(domain) for domain in goal.domains}
+    allowed_analyses = set(goal.analyses)
+    ids = [stage.id for stage in stages]
+    if len(ids) != len(set(ids)):
+        raise ValueError("model-authored plan has duplicate stage ids")
+    seen: set[str] = set()
+    used_domains: set[str] = set()
+    for stage in stages:
+        domain = domain_name(stage.domain)
+        if domain not in allowed_domains:
+            raise ValueError(f"model-authored plan invented domain {domain!r}")
+        used_domains.add(domain)
+        if not stage.analyses or not set(stage.analyses).issubset(allowed_analyses):
+            raise ValueError(f"stage {stage.id!r} uses undeclared or empty analyses")
+        if any(dependency not in seen for dependency in stage.depends_on):
+            raise ValueError(f"stage {stage.id!r} depends on a missing or later stage")
+        if stage.fanout_per_input > max(2, int(worker_budget) * 4):
+            raise ValueError(f"stage {stage.id!r} exceeds the hypothesis budget")
+        if stage.keep > stage.fanout_per_input:
+            raise ValueError(f"stage {stage.id!r} keeps more candidates than it creates")
+        seen.add(stage.id)
+    if not allowed_domains.issubset(used_domains):
+        missing = sorted(allowed_domains - used_domains)
+        raise ValueError(f"model-authored plan omitted required domains: {missing}")
+    if not allowed_analyses.issubset(set(stages[-1].analyses)):
+        raise ValueError("final stage cannot measure every objective and constraint")

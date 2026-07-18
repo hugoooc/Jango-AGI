@@ -103,10 +103,17 @@ class AutonomousChief:
         max_workers: int = 32,
         parameter_specs: tuple[ParameterSpec, ...] = (),
         metric_specs: tuple[MetricSpec, ...] = (),
+        domain_dependencies: Mapping[str, tuple[str, ...]] | None = None,
+        domain_parameter_counts: Mapping[str, int] | None = None,
     ):
         self.mission_id = mission_id
         self.planner = EngineeringPlanner(metric_specs or None)
-        self.reasoning = reasoning or OpenAICompatibleReasoningProvider.from_environment() or RuleBasedReasoningProvider()
+        deterministic = RuleBasedReasoningProvider(domain_dependencies, domain_parameter_counts)
+        self.reasoning = (
+            reasoning
+            or OpenAICompatibleReasoningProvider.from_environment(fallback=deterministic)
+            or deterministic
+        )
         self.parameter_names = {item.name for item in parameter_specs}
         self.specialists = default_specialists()
         if parameter_specs:

@@ -26,6 +26,7 @@ class AdapterManifest:
     concurrency: str = "isolated-process"
     parameter_specs: tuple[ParameterSpec, ...] = ()
     metric_specs: tuple[MetricSpec, ...] = ()
+    domain_dependencies: Mapping[str, tuple[str, ...]] | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -59,6 +60,10 @@ class AdapterManifest:
                 }
                 for item in self.metric_specs
             ],
+            "domain_dependencies": {
+                str(domain): list(dependencies)
+                for domain, dependencies in (self.domain_dependencies or {}).items()
+            },
         }
 
 
@@ -90,6 +95,25 @@ class SoftwareAdapterRegistry:
             for item in manifest.metric_specs:
                 by_name[item.name] = item
         return tuple(by_name.values())
+
+    def domain_dependencies(self) -> dict[str, tuple[str, ...]]:
+        """Merge adapter-declared workflow edges without embedding domain names in the Chief."""
+        merged: dict[str, list[str]] = {}
+        for manifest, _factory in self._adapters.values():
+            for domain, dependencies in (manifest.domain_dependencies or {}).items():
+                bucket = merged.setdefault(str(domain), [])
+                for dependency in dependencies:
+                    if dependency not in bucket:
+                        bucket.append(str(dependency))
+        return {domain: tuple(dependencies) for domain, dependencies in merged.items()}
+
+    def domain_parameter_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for spec in self.parameter_specs():
+            for domain in spec.domains:
+                name = domain_name(domain)
+                counts[name] = counts.get(name, 0) + 1
+        return counts
 
     def factory_for(self, analysis: str) -> tuple[AdapterManifest, AdapterFactory]:
         for manifest, factory in self._adapters.values():

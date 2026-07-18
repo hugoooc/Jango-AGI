@@ -14,9 +14,22 @@ from chief_engineer.models import Domain, MetricSpec, ParameterSpec
 from chief_engineer.orchestrator import ChiefEngineer
 from chief_engineer.planner import EngineeringPlanner
 from chief_engineer.mission import AutonomousChief
+from chief_engineer.reasoning import OpenAICompatibleReasoningProvider, RuleBasedReasoningProvider
 
 
 class ChiefEngineerTests(unittest.TestCase):
+    FLIGHT_DEPENDENCIES = {
+        "aerodynamics": ("geometry",),
+        "stability": ("geometry", "aerodynamics"),
+        "structures": ("geometry",),
+    }
+    FLIGHT_PARAMETER_COUNTS = {
+        "geometry": 6,
+        "aerodynamics": 5,
+        "stability": 3,
+        "structures": 3,
+    }
+
     def test_planner_decomposes_ld_and_stability(self):
         planner = EngineeringPlanner()
         goal = planner.parse_goal("Optimize L/D while staying stable")
@@ -61,6 +74,8 @@ class ChiefEngineerTests(unittest.TestCase):
             "mission-test",
             api_factory=lambda _handle: SyntheticApi(),
             event_sink=lambda event, payload: events.append((event, payload)),
+            domain_dependencies=self.FLIGHT_DEPENDENCIES,
+            domain_parameter_counts=self.FLIGHT_PARAMETER_COUNTS,
         )
         outcome = chief.run(
             "Optimize L/D while staying stable",
@@ -69,7 +84,7 @@ class ChiefEngineerTests(unittest.TestCase):
         )
         spawned = [payload for event, payload in events if event == "team.spawned"]
         self.assertEqual([item["stage_id"] for item in spawned], ["geometry", "aerodynamics", "stability"])
-        self.assertEqual([item["agent_count"] for item in spawned], [4, 6, 6])
+        self.assertEqual([item["agent_count"] for item in spawned], [6, 6, 4])
         self.assertEqual(len(outcome.cycles[0].stages), 3)
         self.assertTrue(outcome.winner_evaluation.feasible)
         transfers = [payload for event, payload in events if event == "artifact.transferred"]
@@ -82,6 +97,8 @@ class ChiefEngineerTests(unittest.TestCase):
             "mission-batch",
             api_factory=lambda _handle: SyntheticApi(),
             event_sink=lambda event, payload: events.append((event, payload)),
+            domain_dependencies=self.FLIGHT_DEPENDENCIES,
+            domain_parameter_counts=self.FLIGHT_PARAMETER_COUNTS,
         )
         chief.run("Optimize L/D while staying stable", worker_budget=2, max_cycles=1)
         completed = [payload["agent_id"] for event, payload in events if event == "agent.completed"]
@@ -102,6 +119,8 @@ class ChiefEngineerTests(unittest.TestCase):
             "mission-progress",
             api_factory=lambda _handle: ProgressApi(),
             event_sink=lambda event, payload: events.append((event, payload)),
+            domain_dependencies=self.FLIGHT_DEPENDENCIES,
+            domain_parameter_counts=self.FLIGHT_PARAMETER_COUNTS,
         )
         chief.run("Optimize L/D while staying stable", worker_budget=2, max_cycles=1)
         progress = [payload for event, payload in events if event == "agent.progress"]
@@ -187,6 +206,66 @@ class ChiefEngineerTests(unittest.TestCase):
         self.assertLess(
             outcome.winner_evaluation.metrics["peak_temperature"],
             outcome.baseline_evaluation.metrics["peak_temperature"],
+        )
+
+    def test_adapter_declares_custom_domain_order_without_chief_code_changes(self):
+        class ProcessApi:
+            def evaluate(self, design, analyses):
+                rate = float(design.get("cooling_rate", 1.0))
+                return {"cooling_rate": rate, "defect_rate": 10.0 / rate}
+
+            def close(self):
+                pass
+
+        parameters = (
+            ParameterSpec("cooling_rate", 0.5, 5.0, 0.20, domains=("thermal", "manufacturing")),
+        )
+        metrics = (
+            MetricSpec(
+                "defect_rate", "manufacturing", "min", ("defects",),
+                domains=("manufacturing", "thermal"),
+            ),
+        )
+        chief = AutonomousChief(
+            "mission-process",
+            api_factory=lambda _handle: ProcessApi(),
+            parameter_specs=parameters,
+            metric_specs=metrics,
+            domain_dependencies={"manufacturing": ("thermal",)},
+            domain_parameter_counts={"thermal": 1, "manufacturing": 1},
+        )
+        outcome = chief.run("Minimize defects", worker_budget=2, max_cycles=1)
+        self.assertEqual([stage.domain for stage in outcome.plan.stages], ["thermal", "manufacturing"])
+        self.assertLess(
+            outcome.winner_evaluation.metrics["defect_rate"],
+            outcome.baseline_evaluation.metrics["defect_rate"],
+        )
+
+    def test_reasoning_model_cannot_invent_an_undeclared_domain(self):
+        class InventingProvider(OpenAICompatibleReasoningProvider):
+            def _json_call(self, prompt):
+                return {
+                    "rationale": "invent an unavailable solver",
+                    "stages": [{
+                        "id": "quantum",
+                        "name": "Quantum campaign",
+                        "domain": "quantum",
+                        "analyses": ["aerodynamics", "stability"],
+                        "fanout_per_input": 2,
+                        "keep": 1,
+                    }],
+                }
+
+        fallback = RuleBasedReasoningProvider(
+            self.FLIGHT_DEPENDENCIES,
+            self.FLIGHT_PARAMETER_COUNTS,
+        )
+        provider = InventingProvider("https://unused.invalid", "unused", "unused", fallback=fallback)
+        goal = EngineeringPlanner().parse_goal("Optimize L/D while staying stable")
+        plan = provider.plan(goal, worker_budget=3, max_cycles=1)
+        self.assertEqual(
+            [stage.domain for stage in plan.stages],
+            ["geometry", "aerodynamics", "stability"],
         )
 
 
