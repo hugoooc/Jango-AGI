@@ -20,6 +20,7 @@ async def main() -> None:
             expected = {
                 "list_capabilities", "list_missions", "start_mission",
                 "get_mission", "get_mission_events", "wait_for_mission",
+                "get_improvement_proposal",
             }
             missing = expected - names
             if missing:
@@ -57,12 +58,23 @@ async def main() -> None:
                 raise RuntimeError("mission did not reach a terminal state")
             if result["mission"]["state"] != "complete":
                 raise RuntimeError(json.dumps(result["mission"], indent=2))
+            improvement = await session.call_tool("get_improvement_proposal", {
+                "mission_id": mission_id,
+            })
+            if improvement.isError or not improvement.structuredContent:
+                raise RuntimeError("improvement proposal failed")
+            improvement_payload = improvement.structuredContent.get(
+                "result", improvement.structuredContent,
+            )
+            if improvement_payload.get("auto_promote") is not False:
+                raise RuntimeError("improvement proposal must never auto-promote")
             print(json.dumps({
                 "tools": sorted(names),
                 "mission_id": mission_id,
                 "state": result["mission"]["state"],
                 "event_cursor": cursor,
                 "winner": result["mission"]["result"]["winner"],
+                "improvement": improvement_payload,
             }, indent=2))
 
 

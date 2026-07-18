@@ -111,6 +111,13 @@ def get_mission_events(mission_id: str, after: int = 0) -> dict[str, Any]:
 
 
 @mcp.tool()
+def get_improvement_proposal(mission_id: str) -> dict[str, Any]:
+    """Derive a bounded, evidence-linked runtime improvement proposal; never mutates production."""
+    path = f"/api/missions/{urllib.parse.quote(mission_id, safe='')}/improvement"
+    return _request("GET", path)
+
+
+@mcp.tool()
 def wait_for_mission(mission_id: str, timeout_seconds: int = 45, after: int = 0) -> dict[str, Any]:
     """Wait briefly for mission progress or completion and return state plus newly observed events."""
     timeout = max(1, min(int(timeout_seconds), 60))

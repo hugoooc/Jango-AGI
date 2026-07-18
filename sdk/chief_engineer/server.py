@@ -17,6 +17,7 @@ from .api import HttpSimulationApi, OpenVSPDirectApi, SubprocessOpenVSPApi, Synt
 from .events import EventBus
 from .fleet import DockerVmProvider, LocalVmProvider
 from .mission import AutonomousChief, MissionOutcome
+from .improvement import propose_improvement
 
 
 HERE = Path(__file__).resolve().parent
@@ -128,6 +129,13 @@ class Handler(BaseHTTPRequestHandler):
                     "closed": record.bus.closed,
                     "events": events,
                 })
+                return
+            if suffix == "improvement":
+                proposal = propose_improvement(
+                    record.public(),
+                    [event.as_dict() for event in record.bus.snapshot()],
+                )
+                self._json(200, proposal.as_dict())
                 return
             if suffix == "events":
                 after = int((parse_qs(parsed.query).get("after") or ["0"])[0])

@@ -17,6 +17,7 @@ mcp:
       - list_capabilities
       - get_mission
       - get_mission_events
+      - get_improvement_proposal
 system_instructions:
   mode: append
   content: |

@@ -13,6 +13,7 @@ skills:
 subagents:
   - specialist
   - critic
+  - maintainer
 mcp:
   engineering:
     include:
@@ -22,6 +23,7 @@ mcp:
       - get_mission
       - get_mission_events
       - wait_for_mission
+      - get_improvement_proposal
 system_instructions:
   mode: append
   content: |

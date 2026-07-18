@@ -10,6 +10,7 @@ if str(SDK) not in sys.path:
 from chief_engineer.api import SyntheticApi
 from chief_engineer.events import EventBus
 from chief_engineer.fleet import LocalVmProvider
+from chief_engineer.improvement import propose_improvement
 from chief_engineer.models import Domain, MetricSpec, ParameterSpec
 from chief_engineer.orchestrator import ChiefEngineer
 from chief_engineer.planner import EngineeringPlanner
@@ -267,6 +268,54 @@ class ChiefEngineerTests(unittest.TestCase):
             [stage.domain for stage in plan.stages],
             ["geometry", "aerodynamics", "stability"],
         )
+
+    def test_successful_improving_mission_does_not_trigger_mutation(self):
+        proposal = propose_improvement({
+            "mission_id": "mission-clean",
+            "state": "complete",
+            "result": {
+                "baseline": {"evaluation": {"score": 1.0}},
+                "winner": {"evaluation": {"score": 1.25}},
+            },
+        }, [
+            {"event": "worker.provisioned", "payload": {"worker_id": "w-1"}},
+            {"event": "agent.completed", "payload": {"agent_id": "a-1"}},
+            {"event": "worker.released", "payload": {"worker_id": "w-1"}},
+        ])
+        self.assertEqual(proposal.disposition, "no_change")
+        self.assertIsNone(proposal.target)
+        self.assertFalse(proposal.auto_promote)
+
+    def test_worker_failure_proposes_execution_regression(self):
+        proposal = propose_improvement({
+            "mission_id": "mission-failed",
+            "state": "failed",
+            "result": {"status": "failed"},
+        }, [{
+            "sequence": 7,
+            "event": "agent.failed",
+            "payload": {"agent_id": "a-2", "error": "solver unavailable"},
+        }])
+        self.assertEqual(proposal.disposition, "proposed")
+        self.assertEqual(proposal.target, "execution_reliability")
+        self.assertFalse(proposal.auto_promote)
+        self.assertTrue(any(item.get("sequence") == 7 for item in proposal.evidence))
+
+    def test_unbalanced_worker_ledger_proposes_lifecycle_fix(self):
+        proposal = propose_improvement({
+            "mission_id": "mission-leak",
+            "state": "complete",
+            "result": {
+                "baseline": {"evaluation": {"score": 1.0}},
+                "winner": {"evaluation": {"score": 1.1}},
+            },
+        }, [
+            {"event": "worker.provisioned", "payload": {"worker_id": "w-1"}},
+            {"event": "agent.completed", "payload": {"agent_id": "a-1"}},
+        ])
+        self.assertEqual(proposal.target, "worker_lifecycle")
+        self.assertEqual(proposal.priority, "critical")
+        self.assertFalse(proposal.auto_promote)
 
 
 if __name__ == "__main__":
