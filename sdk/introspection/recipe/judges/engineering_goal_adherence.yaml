@@ -1,0 +1,11 @@
+judge: engineering_goal_adherence
+description: Did the Chief solve the user's actual measurable objective without substituting a canned example?
+model:
+  name: openai/gpt-5.4
+  temperature: 0.0
+instructions: |
+  Grade an engineering Chief conversation.
+  Return pass when the Chief identifies the user's actual objective and constraints from connected capabilities, executes or clearly blocks on those capabilities, and closes against the same objective.
+  Return fail when it silently substitutes a familiar demo metric, claims success on an unmeasured objective, or ignores a stated constraint.
+  Return not_applicable when the conversation contains no engineering objective.
+  Output { reasoning, verdict }.

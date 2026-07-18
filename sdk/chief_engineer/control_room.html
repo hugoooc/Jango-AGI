@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hacknation — Chief Engineering Control Room</title>
+  <style>
+    :root {
+      --ink: #080b0d;
+      --panel: #10161a;
+      --panel-2: #151d21;
+      --line: #2b383d;
+      --paper: #e9eee8;
+      --muted: #839197;
+      --acid: #c7ff42;
+      --cyan: #5ce1e6;
+      --amber: #ffb84a;
+      --red: #ff625f;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .45);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--paper);
+      background:
+        radial-gradient(circle at 72% 12%, rgba(92, 225, 230, .08), transparent 26rem),
+        radial-gradient(circle at 9% 82%, rgba(199, 255, 66, .06), transparent 24rem),
+        var(--ink);
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .18;
+      background-image:
+        linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+      background-size: 38px 38px;
+      mask-image: linear-gradient(to bottom, black, transparent 90%);
+    }
+    button, textarea, input { font: inherit; }
+    .shell { position: relative; min-height: 100vh; padding: 20px; }
+    .masthead {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      min-height: 66px;
+      border: 1px solid var(--line);
+      background: rgba(8, 11, 13, .82);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+    .brand { display: flex; align-items: stretch; min-height: 64px; }
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 70px;
+      color: var(--ink);
+      background: var(--acid);
+      font-family: "Avenir Next Condensed", sans-serif;
+      font-weight: 900;
+      font-size: 23px;
+      letter-spacing: -.08em;
+    }
+    .brand-copy { display: flex; flex-direction: column; justify-content: center; padding: 0 18px; }
+    .brand-copy strong { font-family: "Avenir Next Condensed", sans-serif; font-size: 20px; letter-spacing: .16em; }
+    .brand-copy span, .eyebrow { color: var(--muted); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
+    .mission-clock { font-family: Menlo, monospace; font-size: 11px; color: var(--muted); letter-spacing: .1em; }
+    .global-status { display: flex; align-items: center; justify-content: flex-end; gap: 11px; padding-right: 18px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+    .runtime-mode { padding: 5px 7px; color: var(--cyan); border: 1px solid rgba(92,225,230,.3); font: 8px Menlo, monospace; letter-spacing: .08em; white-space: nowrap; }
+    .beacon { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 5px rgba(131,145,151,.08); }
+    .beacon.live { background: var(--acid); box-shadow: 0 0 0 5px rgba(199,255,66,.1), 0 0 20px rgba(199,255,66,.7); animation: breathe 1.8s infinite; }
+    .layout { display: grid; grid-template-columns: 320px minmax(0, 1fr) 320px; gap: 14px; margin-top: 14px; min-height: calc(100vh - 120px); }
+    .panel { border: 1px solid var(--line); background: rgba(15, 21, 25, .9); box-shadow: var(--shadow); }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; min-height: 47px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+    .panel-head h2 { margin: 0; font-family: "Avenir Next Condensed", sans-serif; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; }
+    .index { color: var(--acid); font-family: Menlo, monospace; font-size: 10px; }
+    .command { display: flex; flex-direction: column; }
+    .command-body { padding: 18px; }
+    .command h1 { margin: 6px 0 10px; max-width: 260px; font-family: Georgia, serif; font-size: 35px; font-weight: 400; line-height: .98; letter-spacing: -.04em; }
+    .command h1 em { color: var(--acid); font-style: italic; }
+    .intro { margin: 0 0 22px; color: #aab5b7; font-size: 12px; line-height: 1.65; }
+    .goal-box { position: relative; }
+    textarea {
+      width: 100%;
+      min-height: 126px;
+      resize: vertical;
+      padding: 14px;
+      color: var(--paper);
+      background: #090d0f;
+      border: 1px solid #344349;
+      border-radius: 0;
+      outline: none;
+      line-height: 1.5;
+      transition: border .2s, box-shadow .2s;
+    }
+    textarea:focus { border-color: var(--cyan); box-shadow: inset 3px 0 0 var(--cyan); }
+    .goal-tag { position: absolute; right: 8px; bottom: 8px; color: var(--muted); font: 9px Menlo, monospace; letter-spacing: .08em; }
+    .control-row { margin-top: 18px; }
+    .control-label { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--muted); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+    .control-label output { color: var(--paper); font: 11px Menlo, monospace; }
+    input[type="range"] { width: 100%; accent-color: var(--acid); }
+    .launch {
+      position: relative;
+      width: 100%;
+      margin-top: 22px;
+      padding: 16px 12px;
+      color: var(--ink);
+      background: var(--acid);
+      border: 0;
+      cursor: pointer;
+      font-family: "Avenir Next Condensed", sans-serif;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      overflow: hidden;
+      transition: transform .18s, filter .18s;
+    }
+    .launch::after { content: "↗"; position: absolute; right: 16px; font-size: 18px; }
+    .launch:hover { transform: translateY(-2px); filter: brightness(1.08); }
+    .launch:disabled { cursor: wait; filter: grayscale(.8); transform: none; }
+    .principles { margin-top: auto; padding: 16px 18px; border-top: 1px solid var(--line); }
+    .principle { display: grid; grid-template-columns: 20px 1fr; gap: 10px; padding: 9px 0; color: var(--muted); font-size: 10px; line-height: 1.45; border-bottom: 1px dotted #2b383d; }
+    .principle b { color: var(--cyan); font: 10px Menlo, monospace; }
+    .workspace { min-width: 0; display: flex; flex-direction: column; }
+    .workspace-top { display: grid; grid-template-columns: 1fr 220px; border-bottom: 1px solid var(--line); }
+    .mission-title { padding: 13px 16px; min-width: 0; }
+    .mission-title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Georgia, serif; font-size: 18px; font-weight: 400; }
+    .mission-title span { color: var(--muted); font: 9px Menlo, monospace; letter-spacing: .12em; }
+    .mission-kpis { display: grid; grid-template-columns: repeat(3, 1fr); border-left: 1px solid var(--line); }
+    .mini-kpi { display: grid; place-items: center; border-left: 1px solid var(--line); }
+    .mini-kpi:first-child { border-left: 0; }
+    .mini-kpi b { font: 17px "Avenir Next Condensed", sans-serif; }
+    .mini-kpi span { color: var(--muted); font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
+    .pipeline-wrap { position: relative; flex: 1; min-height: 590px; overflow: auto; }
+    .pipeline { position: relative; display: flex; gap: 36px; min-width: 100%; min-height: 100%; padding: 34px; align-items: flex-start; }
+    .empty-state { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; color: var(--muted); }
+    .empty-orbit { position: relative; width: 250px; height: 250px; margin: 0 auto 22px; border: 1px solid #28353a; border-radius: 50%; animation: orbit 18s linear infinite; }
+    .empty-orbit::before, .empty-orbit::after { content: ""; position: absolute; border: 1px solid #233036; border-radius: 50%; }
+    .empty-orbit::before { inset: 35px; }
+    .empty-orbit::after { inset: 78px; background: var(--acid); box-shadow: 0 0 35px rgba(199,255,66,.35); }
+    .empty-state strong { display: block; color: var(--paper); font-family: Georgia, serif; font-size: 24px; font-weight: 400; }
+    .empty-state p { max-width: 360px; font-size: 12px; line-height: 1.6; }
+    .stage {
+      position: relative;
+      flex: 0 0 255px;
+      min-height: 470px;
+      border: 1px solid #314047;
+      background: linear-gradient(180deg, rgba(23,31,35,.97), rgba(12,17,20,.94));
+      transition: border .25s, transform .25s;
+      animation: stageIn .48s both;
+    }
+    .stage::after {
+      content: "";
+      position: absolute;
+      top: 34px;
+      left: 100%;
+      width: 36px;
+      height: 1px;
+      background: #405158;
+    }
+    .stage:last-child::after { display: none; }
+    .stage.active { border-color: var(--cyan); transform: translateY(-4px); box-shadow: 0 0 35px rgba(92,225,230,.09); }
+    .stage.done { border-color: rgba(199,255,66,.65); }
+    .stage-header { min-height: 92px; padding: 13px 14px; border-bottom: 1px solid var(--line); }
+    .stage-num { display: flex; justify-content: space-between; color: var(--muted); font: 9px Menlo, monospace; text-transform: uppercase; }
+    .stage-domain { color: var(--cyan); }
+    .stage h3 { margin: 11px 0 4px; font-family: "Avenir Next Condensed", sans-serif; font-size: 20px; line-height: 1; text-transform: uppercase; }
+    .stage-meta { color: var(--muted); font-size: 9px; letter-spacing: .08em; }
+    .agents { padding: 10px; }
+    .agent {
+      position: relative;
+      margin-bottom: 8px;
+      padding: 11px 10px 10px 14px;
+      border: 1px solid #2b383d;
+      background: #0b1012;
+      overflow: hidden;
+      transition: border .2s, transform .2s, opacity .2s;
+      animation: agentIn .35s both;
+    }
+    .agent::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #354248; }
+    .agent.running { border-color: rgba(92,225,230,.5); transform: translateX(3px); }
+    .agent.running::before { background: var(--cyan); box-shadow: 0 0 15px var(--cyan); animation: scan 1.2s infinite; }
+    .agent.complete::before { background: var(--acid); }
+    .agent.selected { border-color: var(--acid); background: rgba(199,255,66,.055); }
+    .agent.rejected { opacity: .42; }
+    .agent.failed::before { background: var(--red); }
+    .agent-top { display: flex; justify-content: space-between; gap: 8px; }
+    .agent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px Menlo, monospace; }
+    .agent-state { color: var(--muted); font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
+    .agent.running .agent-state { color: var(--cyan); }
+    .agent.complete .agent-state { color: var(--acid); }
+    .agent-reason { margin-top: 7px; color: #77868b; font-size: 9px; line-height: 1.4; }
+    .agent-progress { margin-top: 9px; }
+    .agent-progress-meta { display: flex; justify-content: space-between; gap: 8px; color: #68777c; font: 8px Menlo, monospace; letter-spacing: .07em; text-transform: uppercase; }
+    .agent-progress-meta span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .agent-progress-track { position: relative; height: 3px; margin-top: 5px; overflow: hidden; background: #202b2f; }
+    .agent-progress-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--cyan); box-shadow: 0 0 12px rgba(92,225,230,.75); transition: width .35s ease, background .2s; }
+    .agent.complete .agent-progress-fill { background: var(--acid); box-shadow: 0 0 12px rgba(199,255,66,.55); }
+    .agent.failed .agent-progress-fill { background: var(--red); }
+    .agent-metrics { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .metric-chip { padding: 3px 5px; color: #b8c4c5; background: #172024; font: 8px Menlo, monospace; }
+    .agent-geometry-wrap {
+      position: relative;
+      display: none;
+      margin: 10px -10px -10px -14px;
+      border-top: 1px solid #253238;
+      background:
+        linear-gradient(rgba(92,225,230,.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(92,225,230,.045) 1px, transparent 1px),
+        #080d0f;
+      background-size: 14px 14px;
+      cursor: zoom-in;
+    }
+    .agent-geometry-wrap.ready { display: block; }
+    canvas.agent-geometry { display: block; width: 100%; height: 116px; margin: 0; border: 0; }
+    .geometry-label { position: absolute; left: 8px; top: 7px; color: var(--cyan); font: 8px Menlo, monospace; letter-spacing: .1em; }
+    .geometry-open { position: absolute; right: 8px; bottom: 7px; color: var(--muted); font: 8px Menlo, monospace; }
+    .handoff { position: absolute; z-index: 4; top: 30px; right: -22px; width: 8px; height: 8px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 12px var(--acid); animation: handoff 1s ease-out both; }
+    .telemetry { display: flex; flex-direction: column; min-width: 0; }
+    .chief-brief { padding: 15px; border-bottom: 1px solid var(--line); min-height: 162px; background: linear-gradient(135deg, rgba(199,255,66,.055), transparent); }
+    .chief-brief .eyebrow { color: var(--acid); }
+    .chief-brief blockquote { margin: 12px 0 0; font-family: Georgia, serif; font-size: 17px; line-height: 1.35; }
+    .chief-brief p { margin: 10px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+    .objective { padding: 14px; border-bottom: 1px solid var(--line); }
+    .objective-value { display: flex; align-items: flex-end; justify-content: space-between; }
+    .objective-value b { font-family: "Avenir Next Condensed", sans-serif; font-size: 44px; line-height: 1; font-weight: 500; }
+    .objective-value span { margin-bottom: 5px; color: var(--acid); font: 10px Menlo, monospace; }
+    canvas { width: 100%; height: 74px; margin-top: 8px; border-bottom: 1px solid #263237; }
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
+    .metric { padding: 12px 14px; border-right: 1px solid var(--line); border-top: 1px solid var(--line); }
+    .metric:nth-child(even) { border-right: 0; }
+    .metric span { display: block; color: var(--muted); font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
+    .metric b { display: block; margin-top: 4px; font: 16px Menlo, monospace; font-weight: 400; }
+    .log { min-height: 190px; max-height: 310px; overflow: auto; padding: 8px 12px 14px; }
+    .log-row { display: grid; grid-template-columns: 46px 1fr; gap: 7px; padding: 7px 0; border-bottom: 1px dotted #2b383d; font: 9px Menlo, monospace; line-height: 1.35; animation: logIn .25s both; }
+    .log-time { color: #56666c; }
+    .log-msg { color: #9ba8ab; }
+    .log-msg b { color: var(--paper); font-weight: 400; }
+    .toast { position: fixed; left: 50%; bottom: 24px; z-index: 20; transform: translate(-50%, 20px); padding: 12px 18px; color: var(--ink); background: var(--paper); opacity: 0; pointer-events: none; font-size: 11px; box-shadow: var(--shadow); transition: .25s; }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+    .geometry-modal { position: fixed; inset: 0; z-index: 30; display: none; padding: 34px; background: rgba(3,6,8,.88); backdrop-filter: blur(16px); }
+    .geometry-modal.open { display: grid; place-items: center; }
+    .geometry-inspector { width: min(1180px, 96vw); height: min(760px, 90vh); display: grid; grid-template-rows: auto 1fr auto; border: 1px solid #43565d; background: #080d0f; box-shadow: 0 34px 100px #000; }
+    .geometry-inspector-head { display: flex; align-items: center; justify-content: space-between; min-height: 62px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+    .geometry-inspector-head strong { display: block; font: 17px Menlo, monospace; font-weight: 400; }
+    .geometry-inspector-head span { color: var(--muted); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; }
+    .geometry-close { width: 38px; height: 38px; color: var(--paper); border: 1px solid var(--line); background: transparent; cursor: pointer; }
+    .geometry-stage { position: relative; min-height: 0; background: radial-gradient(circle at center, rgba(92,225,230,.09), transparent 48%); overflow: hidden; }
+    .geometry-stage::before { content:""; position:absolute; inset:0; opacity:.3; background-image:linear-gradient(rgba(92,225,230,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(92,225,230,.08) 1px,transparent 1px); background-size:32px 32px; }
+    canvas.geometry-hero { position: relative; display: block; width: 100%; height: 100%; min-height: 520px; margin: 0; border: 0; }
+    .geometry-inspector-foot { display: flex; flex-wrap: wrap; gap: 8px; min-height: 56px; padding: 13px 20px; border-top: 1px solid var(--line); }
+    .geometry-inspector-foot .metric-chip { font-size: 10px; padding: 6px 8px; }
+    @keyframes breathe { 50% { opacity: .45; } }
+    @keyframes orbit { to { transform: rotate(360deg); } }
+    @keyframes stageIn { from { opacity: 0; transform: translateY(14px); } }
+    @keyframes agentIn { from { opacity: 0; transform: translateX(-8px); } }
+    @keyframes logIn { from { opacity: 0; } }
+    @keyframes scan { 50% { opacity: .35; } }
+    @keyframes handoff { from { transform: translateX(-12px); opacity: 0; } 45% { opacity: 1; } to { transform: translateX(30px); opacity: 0; } }
+    @media (max-width: 1180px) {
+      .layout { grid-template-columns: 285px minmax(0,1fr); }
+      .telemetry { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr 1fr; }
+      .telemetry > * { border-right: 1px solid var(--line); }
+      .log { max-height: 210px; }
+    }
+    @media (max-width: 760px) {
+      .shell { padding: 8px; }
+      .masthead { grid-template-columns: 1fr auto; }
+      .mission-clock { display: none; }
+      .brand-copy span { display: none; }
+      .layout { grid-template-columns: 1fr; }
+      .workspace { min-height: 650px; }
+      .telemetry { display: flex; grid-column: auto; }
+      .workspace-top { grid-template-columns: 1fr; }
+      .mission-kpis { border-left: 0; border-top: 1px solid var(--line); min-height: 58px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="masthead">
+      <div class="brand">
+        <div class="mark">H//N</div>
+        <div class="brand-copy"><strong>HACKNATION</strong><span>Autonomous engineering organization</span></div>
+      </div>
+      <div class="mission-clock" id="clock">0000-00-00 / 00:00:00 UTC</div>
+      <div class="global-status"><span class="runtime-mode" id="runtimeMode">CONNECTING</span><span class="beacon" id="beacon"></span><span id="globalStatus">Chief standing by</span></div>
+    </header>
+
+    <main class="layout">
+      <section class="panel command">
+        <div class="panel-head"><h2>Chief directive</h2><span class="index">01 / INPUT</span></div>
+        <div class="command-body">
+          <span class="eyebrow">Mission objective</span>
+          <h1>Give the team a <em>hard problem.</em></h1>
+          <p class="intro">The chief decomposes the objective, forms specialist teams, provisions direct-API workers, and loops until the evidence converges.</p>
+          <div class="goal-box">
+            <textarea id="goal">Optimize L/D while staying stable</textarea>
+            <span class="goal-tag">NATURAL LANGUAGE / ENGINEERING</span>
+          </div>
+          <div class="control-row">
+            <label class="control-label" for="workers"><span>Concurrent workers</span><output id="workersOut">12</output></label>
+            <input id="workers" type="range" min="2" max="24" value="12">
+          </div>
+          <div class="control-row">
+            <label class="control-label" for="cycles"><span>Chief review cycles</span><output id="cyclesOut">3</output></label>
+            <input id="cycles" type="range" min="1" max="6" value="3">
+          </div>
+          <button class="launch" id="launch">Launch engineering mission</button>
+        </div>
+        <div class="principles">
+          <div class="principle"><b>01</b><span>No pixels. Every solver action is a typed API call.</span></div>
+          <div class="principle"><b>02</b><span>Artifacts move forward only after evidence-based selection.</span></div>
+          <div class="principle"><b>03</b><span>The chief can reject, feed back, and reform the team.</span></div>
+        </div>
+      </section>
+
+      <section class="panel workspace">
+        <div class="workspace-top">
+          <div class="mission-title"><span id="missionId">NO ACTIVE MISSION</span><strong id="missionGoal">Awaiting chief directive</strong></div>
+          <div class="mission-kpis">
+            <div class="mini-kpi"><b id="cycleKpi">—</b><span>Cycle</span></div>
+            <div class="mini-kpi"><b id="agentKpi">0</b><span>Agents</span></div>
+            <div class="mini-kpi"><b id="workerKpi">0</b><span>Live workers</span></div>
+          </div>
+        </div>
+        <div class="pipeline-wrap">
+          <div class="pipeline" id="pipeline">
+            <div class="empty-state" id="emptyState">
+              <div><div class="empty-orbit"></div><strong>The organization is dormant.</strong><p>Issue an objective. The chief will reveal the team structure and every live handoff here.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel telemetry">
+        <div class="panel-head"><h2>Chief telemetry</h2><span class="index">03 / LIVE</span></div>
+        <div class="chief-brief">
+          <span class="eyebrow">Chief engineer</span>
+          <blockquote id="chiefQuote">“I will form the team after I understand the objective.”</blockquote>
+          <p id="chiefFeedback">Reasoning, review decisions, and feedback to the disciplines appear here.</p>
+        </div>
+        <div class="objective">
+          <span class="eyebrow" id="objectiveLabel">Best objective / L·D</span>
+          <div class="objective-value"><b id="objectiveValue">—</b><span id="objectiveDelta">NO DATA</span></div>
+          <canvas id="chart" width="280" height="74"></canvas>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><span>Static margin</span><b id="marginMetric">—</b></div>
+          <div class="metric"><span>Mass</span><b id="massMetric">—</b></div>
+          <div class="metric"><span>Lift coefficient</span><b id="clMetric">—</b></div>
+          <div class="metric"><span>Drag coefficient</span><b id="cdMetric">—</b></div>
+        </div>
+        <div class="panel-head"><h2>Event tape</h2><span class="index" id="eventCount">000</span></div>
+        <div class="log" id="log"></div>
+      </aside>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+  <div class="geometry-modal" id="geometryModal" aria-hidden="true">
+    <section class="geometry-inspector">
+      <header class="geometry-inspector-head"><div><span>REAL OPENVSP ARTIFACT / INTERACTIVE INSPECTION</span><strong id="geometryTitle">Candidate geometry</strong></div><button class="geometry-close" id="geometryClose" aria-label="Close">×</button></header>
+      <div class="geometry-stage"><canvas class="geometry-hero" id="geometryHero"></canvas></div>
+      <footer class="geometry-inspector-foot" id="geometryMetrics"></footer>
+    </section>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const state = { mission: null, source: null, stages: new Map(), agents: new Map(), meshes: new Map(), agentData: new Map(), points: [], baseline: null, objectiveMetric: 'L_D', objectiveDirection: 'max', events: 0, workers: 0, heroFrame: null };
+    const esc = value => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const fmt = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
+
+    setInterval(() => $('clock').textContent = new Date().toISOString().replace('T',' / ').replace(/\.\d+Z/,' UTC'), 500);
+    ['workers','cycles'].forEach(id => $(id).addEventListener('input', () => $(id+'Out').value = $(id).value));
+    $('launch').addEventListener('click', launchMission);
+    $('geometryClose').addEventListener('click', closeGeometry);
+    $('geometryModal').addEventListener('click', event => { if (event.target === $('geometryModal')) closeGeometry(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeGeometry(); });
+    const replayMissionId = new URLSearchParams(location.search).get('mission');
+    loadRuntimeStatus();
+    if (replayMissionId) resumeMission(replayMissionId);
+
+    async function loadRuntimeStatus() {
+      try {
+        const response=await fetch('/health'), health=await response.json();
+        const isOpenVsp=String(health.backend||'').startsWith('openvsp');
+        const provider=health.worker_provider==='docker'?'DOCKER':String(health.worker_provider||'local').toUpperCase();
+        const solver=isOpenVsp?`OPENVSP / ${provider}`:'SYNTHETIC';
+        const chief=health.reasoning==='openai-compatible'?'MODEL CHIEF':'RULE CHIEF';
+        $('runtimeMode').textContent=`${solver} / ${chief}`;
+        $('runtimeMode').style.color=isOpenVsp?'var(--acid)':'var(--amber)';
+        $('runtimeMode').title=`${health.persistence||'memory'} persistence · ${health.backend||'unknown backend'}`;
+      } catch(_) { $('runtimeMode').textContent='RUNTIME OFFLINE'; $('runtimeMode').style.color='var(--red)'; }
+    }
+
+    async function launchMission() {
+      const goal = $('goal').value.trim();
+      if (!goal) return toast('Write a mission objective first.');
+      resetMission();
+      $('launch').disabled = true;
+      $('globalStatus').textContent = 'Chief is forming the team';
+      $('beacon').classList.add('live');
+      try {
+        const response = await fetch('/api/missions', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({goal, workers:Number($('workers').value), cycles:Number($('cycles').value)})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Mission launch failed');
+        state.mission = data.mission_id;
+        history.replaceState(null, '', `?mission=${encodeURIComponent(data.mission_id)}`);
+        $('missionId').textContent = data.mission_id.toUpperCase();
+        $('missionGoal').textContent = goal;
+        connectEvents(data.mission_id);
+      } catch (error) {
+        toast(error.message); finishUi('Launch failed');
+      }
+    }
+
+    async function resumeMission(id) {
+      resetMission();
+      $('launch').disabled=true; $('beacon').classList.add('live'); $('globalStatus').textContent='Replaying mission evidence';
+      try {
+        const response=await fetch(`/api/missions/${encodeURIComponent(id)}`), record=await response.json();
+        if(!response.ok) throw new Error(record.error||'Mission not found');
+        state.mission=id; $('missionId').textContent=id.toUpperCase(); $('missionGoal').textContent=record.request; $('goal').value=record.request;
+        connectEvents(id);
+      } catch(error) { toast(error.message); finishUi('unavailable'); }
+    }
+
+    function connectEvents(id) {
+      state.source = new EventSource(`/api/missions/${id}/events`);
+      state.source.addEventListener('mission', raw => {
+        const item = JSON.parse(raw.data);
+        state.events++;
+        $('eventCount').textContent = String(state.events).padStart(3,'0');
+        handleEvent(item.event, item.payload);
+        logEvent(item.event, item.payload);
+      });
+      state.source.onerror = async () => {
+        try {
+          const response = await fetch(`/api/missions/${id}`);
+          const record = await response.json();
+          if (['complete','failed','incomplete'].includes(record.state)) finishUi(record.state);
+        } catch (_) {}
+      };
+    }
+
+    function handleEvent(type, p) {
+      if (type === 'mission.planned') renderPlan(p);
+      if (type === 'mission.started') {
+        state.baseline = p.metrics?.[state.objectiveMetric];
+        updateMetrics(p.metrics || {});
+        $('chiefQuote').textContent = '“The mission architecture is set. Teams are cleared to explore.”';
+      }
+      if (type === 'cycle.started') {
+        $('cycleKpi').textContent = p.cycle;
+        $('globalStatus').textContent = `Cycle ${p.cycle} in progress`;
+        document.querySelectorAll('.stage').forEach(el => el.classList.remove('done','active'));
+      }
+      if (type === 'stage.started') activateStage(p.stage.id);
+      if (type === 'team.spawned') spawnTeam(p);
+      if (type === 'worker.provisioned') { state.workers++; $('workerKpi').textContent = state.workers; }
+      if (type === 'worker.released') { state.workers = Math.max(0,state.workers-1); $('workerKpi').textContent = state.workers; }
+      if (type === 'agent.started') setAgentState(p.agent_id, 'running', 'SOLVING');
+      if (type === 'agent.progress') updateAgentProgress(p);
+      if (type === 'agent.completed') completeAgent(p);
+      if (type === 'agent.failed') failAgent(p);
+      if (type === 'artifact.transferred') animateHandoff(p.from_stage);
+      if (type === 'stage.completed') completeStage(p);
+      if (type === 'chief.reviewed') chiefReview(p);
+      if (type === 'feedback.issued') {
+        $('chiefFeedback').textContent = p.message;
+        toast(`Chief feedback issued to ${p.to.join(', ')}`);
+      }
+      if (type === 'mission.completed') {
+        updateMetrics(p.metrics || {});
+        finishUi(p.status);
+      }
+      if (type === 'mission.failed') finishUi('failed');
+    }
+
+    function renderPlan(p) {
+      state.objectiveMetric=p.objective||'L_D'; state.objectiveDirection=p.direction||'max';
+      $('objectiveLabel').textContent=`BEST OBJECTIVE / ${state.objectiveMetric}`;
+      const empty = $('emptyState'); if (empty) empty.remove();
+      $('pipeline').innerHTML = '';
+      p.stages.forEach((stage, index) => {
+        const el = document.createElement('article');
+        el.className = 'stage'; el.id = `stage-${stage.id}`; el.style.animationDelay = `${index*.08}s`;
+        el.innerHTML = `<div class="stage-header"><div class="stage-num"><span>STAGE ${String(index+1).padStart(2,'0')}</span><span class="stage-domain">${esc(stage.domain)}</span></div><h3>${esc(stage.name)}</h3><div class="stage-meta">FAN ${stage.fanout_per_input}× / KEEP ${stage.keep} / ${esc(stage.analyses.join(' + '))}</div></div><div class="agents" id="agents-${stage.id}"></div>`;
+        $('pipeline').appendChild(el); state.stages.set(stage.id, stage);
+      });
+      $('workerKpi').textContent = 0;
+      $('chiefQuote').textContent = `“${p.rationale}”`;
+      $('chiefFeedback').textContent = `${p.worker_budget} concurrent API workers authorized across ${p.max_cycles} chief review cycles.`;
+    }
+
+    function activateStage(id) {
+      document.querySelectorAll('.stage').forEach(el => el.classList.remove('active'));
+      const el = $(`stage-${id}`); if (el) { el.classList.add('active'); el.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+    }
+
+    function spawnTeam(p) {
+      const host = $(`agents-${p.stage_id}`); if (!host) return;
+      host.querySelectorAll('.agent').forEach(old => {
+        const oldId=old.id.replace('agent-',''); state.agents.delete(oldId); state.meshes.delete(oldId); state.agentData.delete(oldId);
+      });
+      host.innerHTML = '';
+      p.agents.forEach((agent, index) => {
+        const el = document.createElement('div'); el.className = 'agent'; el.id = `agent-${agent.id}`; el.style.animationDelay = `${index*.045}s`;
+        el.innerHTML = `<div class="agent-top"><span class="agent-name">${esc(agent.id)}</span><span class="agent-state">QUEUED</span></div><div class="agent-reason">${esc(agent.rationale)}</div><div class="agent-progress"><div class="agent-progress-meta"><span class="agent-phase">Awaiting worker</span><span class="agent-percent">0%</span></div><div class="agent-progress-track"><span class="agent-progress-fill"></span></div></div><div class="agent-metrics"></div><div class="agent-geometry-wrap"><span class="geometry-label">OPENVSP / LIVE GEOMETRY</span><canvas class="agent-geometry"></canvas><span class="geometry-open">INSPECT ↗</span></div>`;
+        host.appendChild(el); state.agents.set(agent.id, el);
+      });
+      $('agentKpi').textContent = state.agents.size;
+    }
+
+    function setAgentState(id, className, label) {
+      const el = state.agents.get(id); if (!el) return;
+      el.classList.remove('running','complete','failed'); el.classList.add(className);
+      el.querySelector('.agent-state').textContent = label;
+    }
+
+    function failAgent(p) {
+      setAgentState(p.agent_id,'failed','FAILED');
+      const el=state.agents.get(p.agent_id); if(!el)return;
+      el.querySelector('.agent-progress-fill').style.width='100%';
+      el.querySelector('.agent-phase').textContent=p.error||'Worker failed';
+      el.querySelector('.agent-percent').textContent='ERR';
+    }
+
+    function completeAgent(p) {
+      setAgentState(p.agent_id, 'complete', `${fmt(p.elapsed_s,2)}S`);
+      const el = state.agents.get(p.agent_id); if (!el) return;
+      el.querySelector('.agent-progress-fill').style.width='100%';
+      el.querySelector('.agent-phase').textContent='Evidence verified';
+      el.querySelector('.agent-percent').textContent='100%';
+      const keys = [...new Set([state.objectiveMetric,'static_margin','mass','CL','CD'])];
+      el.querySelector('.agent-metrics').innerHTML = keys.filter(k => p.metrics?.[k] != null).map(k => `<span class="metric-chip">${esc(k)} ${fmt(p.metrics[k], k==='mass'?1:3)}</span>`).join('');
+      state.agentData.set(p.agent_id, p);
+      const geometry = (p.artifacts || []).find(item => item.kind === 'model/obj' && item.url);
+      if (geometry) attachGeometry(p.agent_id, el, geometry.url);
+      if (p.metrics?.[state.objectiveMetric] != null) { state.points.push(Number(p.metrics[state.objectiveMetric])); drawChart(); }
+    }
+
+    function updateAgentProgress(p) {
+      const el=state.agents.get(p.agent_id); if(!el)return;
+      const percent=Math.max(0,Math.min(100,Math.round(Number(p.progress||0)*100)));
+      setAgentState(p.agent_id,'running',`${percent}%`);
+      el.querySelector('.agent-progress-fill').style.width=`${percent}%`;
+      el.querySelector('.agent-phase').textContent=String(p.detail||p.phase||'Solver working');
+      el.querySelector('.agent-percent').textContent=`${percent}%`;
+      const geometry=p.artifact?.kind==='model/obj'&&p.artifact?.url?p.artifact:null;
+      if(geometry) attachGeometry(p.agent_id,el,geometry.url);
+    }
+
+    async function attachGeometry(agentId, el, url) {
+      const wrap = el.querySelector('.agent-geometry-wrap'), canvas = el.querySelector('.agent-geometry');
+      if(wrap.dataset.geometryUrl===url)return;
+      wrap.dataset.geometryUrl=url;
+      wrap.classList.add('ready');
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`geometry ${response.status}`);
+        const mesh = parseObj(await response.text());
+        state.meshes.set(agentId, mesh);
+        renderMesh(canvas, mesh, -.62, .48);
+        wrap.addEventListener('click', () => openGeometry(agentId));
+      } catch (error) {
+        wrap.querySelector('.geometry-label').textContent = 'GEOMETRY UNAVAILABLE';
+      }
+    }
+
+    function parseObj(text) {
+      const vertices = [], faces = [];
+      for (const line of text.split(/\r?\n/)) {
+        if (line.startsWith('v ')) {
+          const p=line.trim().split(/\s+/); vertices.push([Number(p[1]),Number(p[2]),Number(p[3])]);
+        } else if (line.startsWith('f ') && faces.length < 50000) {
+          const ids=line.trim().split(/\s+/).slice(1).map(token=>Number(token.split('/')[0])-1).filter(i=>i>=0);
+          if (ids.length > 2) faces.push(ids);
+        }
+      }
+      if (!vertices.length || !faces.length) throw new Error('empty OBJ');
+      return {vertices, faces};
+    }
+
+    function renderMesh(canvas, mesh, yaw, pitch) {
+      const rect=canvas.getBoundingClientRect(), dpr=Math.min(devicePixelRatio||1,2);
+      const width=Math.max(10,Math.round(rect.width*dpr)), height=Math.max(10,Math.round(rect.height*dpr));
+      if (canvas.width!==width || canvas.height!==height) { canvas.width=width; canvas.height=height; }
+      const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,width,height);
+      const cy=Math.cos(yaw), sy=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
+      const projected=mesh.vertices.map(([x,y,z])=>{ const x1=x*cy-y*sy, y1=x*sy+y*cy; return [x1, y1*cp-z*sp, y1*sp+z*cp]; });
+      let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+      projected.forEach(([x,y])=>{ minX=Math.min(minX,x); maxX=Math.max(maxX,x); minY=Math.min(minY,y); maxY=Math.max(maxY,y); });
+      const scale=.82*Math.min(width/(maxX-minX||1),height/(maxY-minY||1)), ox=width/2-(minX+maxX)/2*scale, oy=height/2+(minY+maxY)/2*scale;
+      const faces=mesh.faces, stride=Math.max(1,Math.ceil(faces.length/2800));
+      ctx.strokeStyle='rgba(92,225,230,.38)'; ctx.lineWidth=Math.max(.55,dpr*.45); ctx.beginPath();
+      for (let f=0;f<faces.length;f+=stride) { const face=faces[f]; for(let i=0;i<face.length;i++){ const a=projected[face[i]], b=projected[face[(i+1)%face.length]]; if(!a||!b)continue; ctx.moveTo(a[0]*scale+ox,oy-a[1]*scale); ctx.lineTo(b[0]*scale+ox,oy-b[1]*scale); } }
+      ctx.stroke();
+    }
+
+    function openGeometry(agentId) {
+      const mesh=state.meshes.get(agentId), data=state.agentData.get(agentId); if(!mesh)return;
+      $('geometryTitle').textContent=agentId;
+      const keys=[...new Set([state.objectiveMetric,'L_D','mass','static_margin','CL','CD','wing_span','wing_sweep','htail_span'])];
+      $('geometryMetrics').innerHTML=keys.filter(k=>data?.metrics?.[k]!=null).map(k=>`<span class="metric-chip">${esc(k)} ${fmt(data.metrics[k],3)}</span>`).join('');
+      $('geometryModal').classList.add('open'); $('geometryModal').setAttribute('aria-hidden','false');
+      let start=performance.now();
+      const animate=now=>{ renderMesh($('geometryHero'),mesh,-.75+(now-start)*.00008,.42); state.heroFrame=requestAnimationFrame(animate); };
+      state.heroFrame=requestAnimationFrame(animate);
+    }
+
+    function closeGeometry() {
+      $('geometryModal').classList.remove('open'); $('geometryModal').setAttribute('aria-hidden','true');
+      if(state.heroFrame) cancelAnimationFrame(state.heroFrame); state.heroFrame=null;
+    }
+
+    function completeStage(p) {
+      const stage = $(`stage-${p.stage_id}`); if (stage) { stage.classList.remove('active'); stage.classList.add('done'); }
+      const selected = new Set((p.selected || []).map(item => item.candidate_id));
+      const host = $(`agents-${p.stage_id}`); if (!host) return;
+      host.querySelectorAll('.agent').forEach(el => el.classList.add(selected.has(el.id.replace('agent-','')) ? 'selected' : 'rejected'));
+    }
+
+    function animateHandoff(stageId) {
+      const stage = $(`stage-${stageId}`); if (!stage) return;
+      const pulse = document.createElement('span'); pulse.className = 'handoff'; stage.appendChild(pulse); setTimeout(()=>pulse.remove(),1100);
+    }
+
+    function chiefReview(p) {
+      $('chiefQuote').textContent = `“${p.rationale}”`;
+      $('chiefFeedback').textContent = p.feedback;
+      updateMetrics(p.metrics || {});
+      $('globalStatus').textContent = `Chief decision: ${p.action}`;
+    }
+
+    function updateMetrics(m) {
+      const objective=m[state.objectiveMetric];
+      if (objective != null) {
+        $('objectiveValue').textContent = fmt(objective,2);
+        const delta = state.baseline == null ? null : Number(objective)-Number(state.baseline);
+        $('objectiveDelta').textContent = delta == null ? 'BASELINE' : `${delta>=0?'+':''}${fmt(delta,2)} VS BASE`;
+      }
+      if (m.static_margin != null) $('marginMetric').textContent = fmt(m.static_margin,3);
+      if (m.mass != null || m.Total_Mass != null) $('massMetric').textContent = fmt(m.mass ?? m.Total_Mass,1);
+      if (m.CL != null) $('clMetric').textContent = fmt(m.CL,3);
+      if (m.CD != null) $('cdMetric').textContent = fmt(m.CD,4);
+    }
+
+    function drawChart() {
+      const canvas = $('chart'), ctx = canvas.getContext('2d'), w=canvas.width, h=canvas.height;
+      ctx.clearRect(0,0,w,h); if (state.points.length < 2) return;
+      const min=Math.min(...state.points), max=Math.max(...state.points), span=max-min || 1;
+      const pts=state.points.slice(-40).map((v,i,a)=>[i/(a.length-1)*(w-8)+4,h-8-(v-min)/span*(h-18)]);
+      const gradient=ctx.createLinearGradient(0,0,w,0); gradient.addColorStop(0,'#5ce1e6'); gradient.addColorStop(1,'#c7ff42');
+      ctx.strokeStyle=gradient; ctx.lineWidth=2; ctx.beginPath(); pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y)); ctx.stroke();
+      ctx.lineTo(pts[pts.length-1][0],h); ctx.lineTo(pts[0][0],h); ctx.closePath();
+      const fill=ctx.createLinearGradient(0,0,0,h); fill.addColorStop(0,'rgba(199,255,66,.18)'); fill.addColorStop(1,'rgba(199,255,66,0)'); ctx.fillStyle=fill; ctx.fill();
+    }
+
+    function logEvent(type, p) {
+      const row=document.createElement('div'); row.className='log-row';
+      const stamp=new Date().toLocaleTimeString([], {hour12:false,minute:'2-digit',second:'2-digit'});
+      const focus=p.agent_id||p.stage_id||p.artifact_id||p.action||'';
+      row.innerHTML=`<span class="log-time">${stamp}</span><span class="log-msg"><b>${esc(type)}</b>${focus?' / '+esc(focus):''}</span>`;
+      $('log').prepend(row); while ($('log').children.length>80) $('log').lastChild.remove();
+    }
+
+    function finishUi(status) {
+      $('launch').disabled=false; $('beacon').classList.remove('live'); $('globalStatus').textContent=`Mission ${status}`;
+      if (state.source) { state.source.close(); state.source=null; }
+    }
+
+    function resetMission() {
+      if (state.source) state.source.close();
+      closeGeometry(); state.mission=null; state.stages.clear(); state.agents.clear(); state.meshes.clear(); state.agentData.clear(); state.points=[]; state.baseline=null; state.objectiveMetric='L_D'; state.objectiveDirection='max'; state.events=0; state.workers=0;
+      $('pipeline').innerHTML='<div class="empty-state" id="emptyState"><div><div class="empty-orbit"></div><strong>Chief is composing the organization.</strong><p>Domains, dependencies, and API workers will appear as the plan is committed.</p></div></div>';
+      $('log').innerHTML=''; $('eventCount').textContent='000'; $('agentKpi').textContent='0'; $('workerKpi').textContent='0'; $('cycleKpi').textContent='—';
+      ['objectiveValue','marginMetric','massMetric','clMetric','cdMetric'].forEach(id=>$(id).textContent='—'); $('objectiveLabel').textContent='BEST OBJECTIVE / L_D'; $('objectiveDelta').textContent='NO DATA'; drawChart();
+    }
+
+    function toast(message) { const el=$('toast'); el.textContent=message; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2600); }
+  </script>
+</body>
+</html>

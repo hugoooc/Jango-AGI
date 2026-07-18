@@ -1,0 +1,18 @@
+FROM legacypilot-openvsp-worker:dev
+
+WORKDIR /workspace
+COPY chief_engineer /workspace/chief_engineer
+COPY models /workspace/models
+
+ENV PYTHONPATH=/opt/OpenVSP/python/openvsp:/opt/OpenVSP/python/degen_geom:/opt/OpenVSP/python/utilities:/opt/OpenVSP/python/openvsp_config \
+    PYTHONUNBUFFERED=1 \
+    MODEL_PATH=/workspace/models/boeing777200.vsp3 \
+    VSPAERO_PATH=/opt/OpenVSP \
+    WORK_ROOT=/worker-runs \
+    WORKER_PORT=8080
+
+EXPOSE 8080
+HEALTHCHECK --interval=5s --timeout=2s --start-period=5s --retries=12 \
+  CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
+ENTRYPOINT ["python3", "-m", "chief_engineer.worker_server"]

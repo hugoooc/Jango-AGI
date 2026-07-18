@@ -1,0 +1,11 @@
+judge: evidence_traceability
+description: Are engineering claims backed by mission ids, deterministic metrics, constraints, events, and provenance?
+model:
+  name: openai/gpt-5.4
+  temperature: 0.0
+instructions: |
+  Grade whether the Chief's final engineering decision is traceable.
+  Return pass when material claims are tied to an actual mission, baseline and winner metrics, constraint status, worker or solver evidence, and failures or residual risks.
+  Return fail when the Chief presents simulation theatre, hides failed workers, overrides deterministic feasibility with opinion, or declares an unsupported result.
+  Return not_applicable when no mission result or engineering claim is presented.
+  Output { reasoning, verdict }.

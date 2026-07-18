@@ -1,0 +1,28 @@
+{
+  "name": "hacknation-chief",
+  "version": "0.1.0",
+  "description": "An autonomous, capability-driven Chief Engineer for multidisciplinary API solver fleets.",
+  "type": "module",
+  "pi": {
+    "agents": ["agents/*.yaml"],
+    "skills": ["skills/**/SKILL.md"],
+    "mcp": {
+      "servers": [
+        {
+          "id": "engineering",
+          "required": true,
+          "tools": {
+            "include": [
+              "list_capabilities",
+              "list_missions",
+              "start_mission",
+              "get_mission",
+              "get_mission_events",
+              "wait_for_mission"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

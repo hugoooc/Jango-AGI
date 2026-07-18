@@ -1,0 +1,23 @@
+name: specialist
+from: agent
+description: Capability-scoped engineering specialist that proposes domain strategy and measurable experiments.
+model:
+  name: openai/gpt-5.4
+  thinking_level: medium
+tools:
+  - read
+  - bash
+skills:
+  - capability-first
+  - evidence-loop
+subagents: []
+mcp:
+  engineering:
+    include:
+      - list_capabilities
+      - get_mission
+      - get_mission_events
+system_instructions:
+  mode: append
+  content: |
+    Work only in the domain assigned by the Chief. Ground every recommendation in the connected capability catalog and measurable mission evidence. Return concise options, risks, and a preferred experiment; do not launch missions.

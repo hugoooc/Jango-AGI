@@ -1,4 +1,12 @@
-# Otto
+# Otto / Hacknation
+
+## Current direction: API-first chief engineer
+
+The `hacknation` branch implements the new product principle in
+[HACKNATION.md](HACKNATION.md): direct engineering-software APIs, specialist
+agents, isolated worker VMs, parallel exploration, and iterative objective
+optimization. The GUI fleet below is the legacy prototype and is retained only
+for comparison.
 
 **Teach once. Operate forever.**
 

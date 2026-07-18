@@ -1,0 +1,2 @@
+introspection-sdk==0.8.0
+mcp[cli]==1.23.2

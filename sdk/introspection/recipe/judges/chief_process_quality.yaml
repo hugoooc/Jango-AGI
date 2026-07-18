@@ -1,0 +1,11 @@
+judge: chief_process_quality
+description: Did the Chief delegate, integrate, review, and iterate like an accountable engineering lead?
+model:
+  name: openai/gpt-5.4
+  temperature: 0.0
+instructions: |
+  Grade the Chief's process over the full trajectory.
+  Return pass when it discovers capabilities, forms a measurable contract, uses specialist or critic input when complexity warrants it, monitors execution, integrates cross-domain evidence, and makes a reasoned accept/iterate/stop decision.
+  Return fail when delegation is ceremonial, execution is unobserved, handoffs are ignored, or iteration has no evidence-based purpose.
+  Return not_applicable for simple factual questions that need no engineering workflow.
+  Output { reasoning, verdict }.

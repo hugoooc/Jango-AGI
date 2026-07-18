@@ -1,8 +1,16 @@
-# Otto
+# Otto / Hacknation
+
+> **Hacknation architecture:** the system is moving from GUI computer vision
+> to direct engineering-software APIs. The chief engineer decomposes a goal,
+> builds sequential/parallel specialist teams, provisions API workers, transfers
+> selected design artifacts between domains, and iterates through chief reviews.
+> See [sdk/HACKNATION.md](sdk/HACKNATION.md).
 
 **Teach once. Operate forever.**
 
-Otto is a desktop AI agent that learns how to operate specialized software without prebuilt integrations, scripts, or application-specific automation.
+Otto is evolving into an engineering chief-engineer agent that coordinates
+specialized workers through software APIs. The original desktop computer-use
+prototype remains in the repository as a reference implementation.
 
 Instead of being programmed for a particular interface, Otto reads the software documentation, safely explores the UI using H Company's computer-use models, observes the results of its actions, and builds a persistent procedural memory. It can then compose what it has learned to complete new workflows and adapt existing work when requirements change.
 
