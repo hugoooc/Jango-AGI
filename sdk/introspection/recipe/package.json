@@ -1,29 +1,20 @@
 {
   "name": "jango",
-  "version": "0.2.0",
-  "description": "Jango: an autonomous, capability-driven Chief Engineer for multidisciplinary API solver fleets.",
+  "version": "1.0.0",
+  "description": "Jango: an autonomous task-native Chief Engineer for constrained aircraft TLAR optimization.",
   "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "smoke": "node solver/cli.mjs inspect --geometry assets/reference-aircraft.vsp3"
+  },
+  "keywords": ["pi-package", "engineering", "mdao", "openvsp", "agents"],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
   "pi": {
     "agents": ["agents/*.yaml"],
     "skills": ["skills/**/SKILL.md"],
-    "mcp": {
-      "servers": [
-        {
-          "id": "engineering",
-          "required": true,
-          "tools": {
-            "include": [
-              "list_capabilities",
-              "list_missions",
-              "start_mission",
-              "get_mission",
-              "get_mission_events",
-              "wait_for_mission",
-              "get_improvement_proposal"
-            ]
-          }
-        }
-      ]
-    }
+    "extensions": ["extensions/*.ts"]
   }
 }

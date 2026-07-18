@@ -1,5 +1,8 @@
 .env
 .venv/
+node_modules/
+.DS_Store
+jango-runs/
 __pycache__/
 *.pyc
 cu/shots/

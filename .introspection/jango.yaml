@@ -2,16 +2,16 @@ name: jango
 runtime_name: jango
 slug: jango
 path: sdk/introspection/recipe
-description: Jango is a capability-driven Chief Engineer that delegates, runs real solver fleets, and iterates against measurable goals.
+description: Jango is a self-contained Chief Engineer that dynamically delegates and runs constrained aircraft TLAR studies inside Introspection tasks.
 strict: true
 runtime:
   kind: byor
   llm_mode: managed
   resources:
     requests:
-      cpu: 1000m
+      cpu: 1500m
       memory: 2Gi
-      storage: 10Gi
+      storage: 12Gi
     limits:
-      cpu: 2000m
+      cpu: 3000m
       memory: 4Gi

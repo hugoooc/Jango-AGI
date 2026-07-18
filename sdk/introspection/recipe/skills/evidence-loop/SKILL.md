@@ -5,15 +5,13 @@ description: Run and review engineering missions using deterministic gates, dura
 
 # Evidence-driven execution
 
-Before launch, record the typed mission contract. Launch exactly one mission for that contract and retain its returned mission id.
+Before launch, record the typed study contract. Launch exactly one numerical study for that contract and retain its returned run id.
 
-Monitor with `engineering.wait_for_mission`; carry `next_after` into later calls. Interpret events as follows:
+Run with `jango_run_study`, then use its run id and `jango_read_study` for independent review. Interpret events as follows:
 
-- `worker.provisioned` proves an isolated execution worker was allocated;
-- `agent.started`, `agent.progress`, and `agent.completed` establish actual software work;
-- `artifact.transferred` proves sequential state handoff between teams;
-- `chief.reviewed` records iteration rationale and feedback;
-- `agent.failed` or `mission.failed` must be surfaced and diagnosed;
-- `mission.completed` is terminal but does not itself prove feasibility.
+- `DOMAIN_FANOUT` establishes multidisciplinary numerical dispatch;
+- `INCUMBENT` proves candidate exploration and records objective/gate progress;
+- `VERIFICATION_COMPLETED` records deterministic replay;
+- `STUDY_COMPLETED` is terminal but does not itself prove feasibility.
 
-At review, compare baseline and winner on the same canonical metrics. Verify every active constraint has a finite observed value and zero violation within tolerance. State backend, worker runtime, candidate id, metric delta, artifacts, failures, and residual uncertainty. Never infer feasibility from prose.
+At review, compare baseline and winner on the same canonical metrics. Verify every active constraint has a finite observed value and zero violation within tolerance. State fidelity, candidate id, metric delta, geometry fingerprint, artifacts, failures, and residual uncertainty. Never infer feasibility from prose or agent opinion.
