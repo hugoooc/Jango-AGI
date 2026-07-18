@@ -128,19 +128,30 @@ class DockerVmProvider:
         except subprocess.CalledProcessError as exc:
             raise RuntimeError(f"could not start API worker: {exc.stderr.strip()}") from exc
 
-        try:
-            port_result = subprocess.run(
-                ["docker", "port", name, "8080/tcp"],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-        except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        deadline = time.monotonic() + self.startup_timeout_s
+        port = None
+        port_error = "Docker returned no published-port mapping"
+        while time.monotonic() < deadline:
+            try:
+                port_result = subprocess.run(
+                    ["docker", "port", name, "8080/tcp"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                bindings = port_result.stdout.strip().splitlines()
+                if bindings:
+                    port = int(bindings[0].rsplit(":", 1)[-1])
+                    break
+            except FileNotFoundError as exc:
+                port_error = str(exc)
+                break
+            except (subprocess.CalledProcessError, ValueError) as exc:
+                port_error = (getattr(exc, "stderr", "") or str(exc)).strip()
+            time.sleep(0.1)
+        if port is None:
             subprocess.run(["docker", "rm", "-f", name], capture_output=True, text=True)
-            detail = getattr(exc, "stderr", "") or str(exc)
-            raise RuntimeError(f"could not discover API worker port: {detail.strip()}") from exc
-        binding = port_result.stdout.strip().splitlines()[0]
-        port = int(binding.rsplit(":", 1)[-1])
+            raise RuntimeError(f"could not discover API worker port: {port_error}")
         endpoint = f"http://127.0.0.1:{port}"
         deadline = time.monotonic() + self.startup_timeout_s
         while time.monotonic() < deadline:

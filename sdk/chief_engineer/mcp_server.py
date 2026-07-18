@@ -19,6 +19,7 @@ from typing import Any
 
 import uvicorn
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -29,6 +30,16 @@ HOST = os.environ.get("CHIEF_MCP_HOST", "0.0.0.0")
 PORT = int(os.environ.get("CHIEF_MCP_PORT", "8770"))
 TERMINAL_STATES = {"complete", "incomplete", "failed"}
 
+
+def _allowed_hosts() -> list[str]:
+    configured = os.environ.get("CHIEF_MCP_ALLOWED_HOSTS", "")
+    return [
+        "127.0.0.1:*",
+        "localhost:*",
+        "[::1]:*",
+        *(host.strip() for host in configured.split(",") if host.strip()),
+    ]
+
 mcp = FastMCP(
     "Jango",
     instructions=(
@@ -38,6 +49,11 @@ mcp = FastMCP(
     stateless_http=True,
     json_response=True,
     streamable_http_path="/mcp",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=_allowed_hosts(),
+        allowed_origins=[],
+    ),
 )
 
 
