@@ -8,9 +8,8 @@
     "smoke": "node solver/cli.mjs inspect --geometry assets/reference-aircraft.vsp3"
   },
   "keywords": ["pi-package", "engineering", "mdao", "openvsp", "agents"],
-  "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "typebox": "*"
+  "dependencies": {
+    "typebox": "1.1.38"
   },
   "pi": {
     "agents": ["agents/*.yaml"],
