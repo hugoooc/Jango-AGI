@@ -690,5 +690,69 @@
 
     function toast(message) { const el=$('toast'); el.textContent=message; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2600); }
   </script>
-</body>
+<!-- SEXYPLOTS: live mission results -->
+<section class="panel" id="sexyplots" style="margin-top:14px;padding:16px 18px">
+  <div style="display:flex;justify-content:space-between;align-items:baseline">
+    <span class="eyebrow">LIVE RESULTS</span>
+    <span id="spStatus" style="color:var(--muted);font:9px Menlo,monospace;letter-spacing:.1em">WAITING FOR METRICS</span>
+  </div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px">
+    <svg id="spBars" width="440" height="240" style="background:#0b0f11;border:1px solid var(--line)"></svg>
+    <svg id="spTrace" width="440" height="240" style="background:#0b0f11;border:1px solid var(--line)"></svg>
+  </div>
+</section>
+<script>
+(function(){
+  const ACID='#c7ff42', CYAN='#5ce1e6', MAG='#ff5ca8', MUT='#839197', GRID='#1d262b', INK='#e8f0ef';
+  const S={mission:null,cursor:0,byName:{},order:[],trace:[],n:0};
+  const el=id=>document.getElementById(id);
+  function numeric(o){const r={};if(o&&typeof o==='object')for(const[k,v]of Object.entries(o))if(typeof v==='number'&&isFinite(v))r[k]=v;return r;}
+  function harvest(ev){
+    const p=ev.payload||{};
+    // any payload carrying a metrics dict: evaluations, iteration.completed, agent.completed
+    const m=numeric(p.metrics||((p.evaluation||{}).metrics));
+    if(!Object.keys(m).length)return;
+    const key=Object.keys(m)[0];               // primary metric = first key
+    const name=p.candidate||p.variant||p.name||p.label||p.agent||('c'+(S.order.length+1));
+    if(!(name in S.byName))S.order.push(name);
+    S.byName[name]=m[key];
+    S.trace.push([++S.n,m[key]]);
+    S.metric=key;
+  }
+  function bars(){
+    const svg=el('spBars');let h='';const rows=S.order.map(n=>({n,v:S.byName[n]}));
+    if(!rows.length){svg.innerHTML='';return;}
+    const base=rows[0].v, vmax=Math.max(...rows.map(r=>Math.abs(r.v)))||1;
+    h+=`<text x="12" y="18" fill="${CYAN}" font-size="10" letter-spacing="2" font-family="Menlo,monospace">${(S.metric||'METRIC').toUpperCase()} // DELTA VS FIRST</text>`;
+    rows.slice(0,6).forEach((r,i)=>{const y=36+i*32,len=Math.max(8,(300)*Math.abs(r.v)/vmax);
+      h+=`<text x="12" y="${y+12}" fill="${INK}" font-size="10" font-family="Menlo,monospace">${r.n}</text>`;
+      h+=`<rect x="120" y="${y}" width="${len}" height="14" fill="${i?ACID:MUT}" opacity=".92"/>`;
+      const d=r.v-base;h+=`<text x="${124+len}" y="${y+11}" fill="${MUT}" font-size="9" font-family="Menlo,monospace">${r.v.toFixed(3)}${i?` (${d>=0?'+':''}${d.toFixed(3)})`:''}</text>`;});
+    svg.innerHTML=h;
+  }
+  function trace(){
+    const svg=el('spTrace');if(S.trace.length<2){svg.innerHTML='';return;}
+    const xs=S.trace.map(p=>p[0]),ys=S.trace.map(p=>p[1]);
+    const xa=Math.min(...xs),xb=Math.max(...xs),ya=Math.min(...ys),yb=Math.max(...ys)===ya?ya+1:Math.max(...ys);
+    const sx=v=>20+(400)*(v-xa)/((xb-xa)||1), sy=v=>210-(170)*(v-ya)/((yb-ya)||1);
+    let h=`<text x="12" y="18" fill="${CYAN}" font-size="10" letter-spacing="2" font-family="Menlo,monospace">EVALUATION TRACE</text>`;
+    for(let g=0;g<5;g++){const gy=40+g*42.5;h+=`<line x1="16" y1="${gy}" x2="424" y2="${gy}" stroke="${GRID}"/>`;}
+    h+=`<path d="${S.trace.map((p,i)=>(i?'L':'M')+sx(p[0]).toFixed(1)+','+sy(p[1]).toFixed(1)).join(' ')}" fill="none" stroke="${CYAN}" stroke-width="2.2"/>`;
+    S.trace.forEach(p=>h+=`<circle cx="${sx(p[0]).toFixed(1)}" cy="${sy(p[1]).toFixed(1)}" r="3" fill="${MAG}"/>`);
+    svg.innerHTML=h;
+  }
+  async function tick(){
+    try{
+      const id=(window.state&&window.state.mission)||S.mission;if(!id)return;
+      if(id!==S.mission){Object.assign(S,{mission:id,cursor:0,byName:{},order:[],trace:[],n:0});}
+      const r=await fetch(`/api/missions/${encodeURIComponent(id)}/events.json?after=${S.cursor}`);
+      if(!r.ok)return;const d=await r.json();
+      (d.events||[]).forEach(harvest);S.cursor=d.next_after||S.cursor;
+      if(S.order.length){el('spStatus').textContent='LIVE // '+S.order.length+' CANDIDATES';bars();trace();}
+    }catch(e){/* stay quiet; plots are presentation, not evidence */}
+  }
+  setInterval(tick,1500);
+})();
+</script>
+\n</body>
 </html>
