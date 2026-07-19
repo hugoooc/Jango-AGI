@@ -13,4 +13,6 @@ npx @introspection-ai/cli recipes validate --path .introspection/jango.yaml
 npx @introspection-ai/pi-recipes check sdk/introspection/recipe --profile publish
 ```
 
+For a branch deployment, open a pull request and point the Introspection staging lane at `pr/<number>`. Each pushed commit then creates an immutable preview recipe and runtime from that exact commit. Keep production on the main-branch deployment path; staging is the end-to-end proving lane for the Chief, its delegated agents, and solver tools.
+
 No credential belongs in this directory and no endpoint binding is required.
