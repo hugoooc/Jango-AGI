@@ -5,6 +5,7 @@ path: sdk/introspection/recipe
 description: Jango is a capability-driven Chief Engineer that delegates, runs real solver fleets, and iterates against measurable goals.
 includes:
   - memory/**
+  - tools/**
 strict: true
 runtime:
   kind: byor
