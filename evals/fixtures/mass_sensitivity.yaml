@@ -1,0 +1,35 @@
+name: mass_sensitivity
+description: >
+  Golden trade study: baseline vs +10% wingspan vs +10% tail size, minimizing
+  nothing — a pure sensitivity mission verifying contract formation, parallel
+  fan-out, deterministic comparison, and an evidence-linked decision.
+backend: synthetic
+
+contract:
+  objective:
+    metric: total_mass        # replace with the canonical name from list_capabilities
+    direction: report          # sensitivity study: report deltas, no optimization
+  variants:
+    - { name: baseline }
+    - { name: wingspan_p10, parameter: wing_span, op: scale, amount: 0.10 }
+    - { name: tail_p10, parameter: tail_size, op: scale, amount: 0.10 }
+  fan_out: 3
+  cycle_budget: 1
+  stop_conditions: [all_variants_terminal]
+
+expected:
+  terminal_status: mission.completed
+  # Reference values from the verified Otto-era trade study on the 737-800 demo
+  # model; recalibrate against one trusted kernel run before first use, then freeze.
+  winner_metric: null          # sensitivity study: no winner; deltas checked below
+  deltas:
+    - { variant: wingspan_p10, metric: total_mass, value: +5.57, rel_tol: 1.0e-2 }
+    - { variant: tail_p10,     metric: total_mass, value: +0.41, rel_tol: 5.0e-2 }
+  ordering: [wingspan_p10 > tail_p10]   # largest mass impact must remain wingspan
+  constraints_satisfied: true
+
+invariants:
+  worker_provisioned_min: 3
+  agent_completed_min: 3
+  agent_failed_allowed: 0
+  artifact_transferred_required: false

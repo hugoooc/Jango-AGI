@@ -1,3 +1,5 @@
+> **LEGACY** — describes the retired Otto GUI-automation lineage (`bot/`, `legacypilot/`, `cu/`, `mapping/`). Not current doctrine; Jango executes through typed APIs only. See the root README.
+
 # Otto — System, Architecture & Process
 
 **Teach once. Operate forever.**
